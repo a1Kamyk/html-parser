@@ -2,3 +2,8 @@
 cmake-build-debug
 cmake-build-release
 
+# ide directories
+.idea
+
+# test files
+input.html
