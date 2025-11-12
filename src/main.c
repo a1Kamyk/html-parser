@@ -1,26 +1,29 @@
 #include <stdio.h>
+#include <sys/stat.h>
 
-#include "../include/lexer.h"
+#include "preprocessor.h"
 
-int main(const int argc, char **argv) {
+int main(const int argc, char** argv) {
     if (argc < 2) {
         printf("Usage: %s <file.html>\n", argv[0]);
         return 1;
     }
 
-    const char *filename = argv[1];
-    FILE* file = fopen(filename, "r");
-
-    if (!file) {
-        printf("Error opening file\n");
-        return 1;
+    // Check for temp folder
+    const char* dir = "temp";
+    struct stat s = {0};
+    if (stat(dir, &s) == -1) {
+        if (mkdir(dir) == -1) {
+            printf("Count not create directory: %s\n", dir);
+            return 1;
+        }
     }
 
-    printf("File opened successfully\n");
+    const char *filename = argv[1];
 
-    get_token(file);
-
-    fclose(file);
+    if (normalize_newlines(filename) != 0) {
+        return 1;
+    }
 
     return 0;
 }
