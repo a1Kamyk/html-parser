@@ -6,4 +6,12 @@ cmake-build-release
 .idea
 
 # test files
+temp
 input.html
+
+# other files
+*.exe
+*.pdb
+*.obj
+
+*.env

@@ -6,7 +6,6 @@
 enum {
     TAG_OPEN,
     TAG_CLOSE,
-    TAG_DATA
 };
 
 int get_token(FILE* file);
