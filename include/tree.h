@@ -3,15 +3,17 @@
 
 #include <stdint.h>
 
-typedef struct tree_node {
-    struct tree_node **children;
+#include "tokenizer.h"
+
+typedef struct dom_tree_node {
+    struct dom_tree_node **children;
     size_t children_amount;
     size_t children_capacity;
 
-    void *data;
-} tree_node_t;
+    token_t* token;
+} dom_tree_node_t;
 
-tree_node_t *create_tree_node(void* data);
-void add_child(tree_node_t *node, tree_node_t *child);
+dom_tree_node_t *create_tree_node(void* data);
+void add_child(dom_tree_node_t *node, dom_tree_node_t *child);
 
 #endif //HTML_PARSER_TREE_H

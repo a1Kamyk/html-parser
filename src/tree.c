@@ -5,8 +5,8 @@
 
 static const size_t DYN_ARR_EXPANSION_COEFFICIENT = 2;
 
-tree_node_t *create_tree_node(void* data) {
-    tree_node_t *node = calloc(1, sizeof(tree_node_t));
+dom_tree_node_t *create_tree_node(void* data) {
+    dom_tree_node_t *node = calloc(1, sizeof(dom_tree_node_t));
     if (!node) {
         printf("Malloc failed: %i", errno);
         return NULL;
@@ -19,14 +19,14 @@ tree_node_t *create_tree_node(void* data) {
 }
 
 
-void add_child(tree_node_t *node, tree_node_t *child) {
+void add_child(dom_tree_node_t *node, dom_tree_node_t *child) {
     if (node->children_amount + 1 <= node->children_capacity) {
         node->children[node->children_amount++] = child;
         return;
     }
 
-    tree_node_t **new_arr = realloc(node->children,
-                            node->children_capacity * sizeof(tree_node_t *) * DYN_ARR_EXPANSION_COEFFICIENT
+    dom_tree_node_t **new_arr = realloc(node->children,
+                            node->children_capacity * sizeof(dom_tree_node_t *) * DYN_ARR_EXPANSION_COEFFICIENT
                             );
     if (!new_arr) {
         printf("Failed adding child node");

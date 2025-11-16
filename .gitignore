@@ -5,7 +5,7 @@ cmake-build-release
 # ide directories
 .idea
 
-# test files
+# byproducts
 temp
 input.html
 
