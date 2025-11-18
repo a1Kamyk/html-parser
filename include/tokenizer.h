@@ -4,8 +4,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#include "tree.h"
+#define INTERNAL_QUEUE_SIZE  8
 
+typedef struct dom_tree_node dom_tree_node_t;
+
+/// tokenizer state machine insertion states
 typedef enum {
     INITIAL = 0,
     BEFORE_HTML,
@@ -30,7 +33,7 @@ typedef enum {
     AFTER_AFTER_FRAMESET
 } insertion_state_t;
 
-/// tokenizer state machine states
+/// tokenizer state machine data states
 typedef enum {
     DATA_STATE = 0,
     RCDATA_STATE,
@@ -127,7 +130,7 @@ typedef enum {
 typedef struct {
     char*       name;
     char*       value;
-} attribute;
+} attribute_t;
 
 /// DOCTYPE token type
 typedef struct {
@@ -141,20 +144,26 @@ typedef struct {
 typedef struct {
     char*       name;
     bool        self_closing_flag;
-    attribute*  attributes;
+    attribute_t*  attributes;
     size_t      attr_count;
 } tag_token;
 
-/// Comment and Character token type
+/// Comment token type
 typedef struct {
     char*       data;
-} data_token;
+} comment_token;
+
+/// Character token type
+typedef struct {
+    int        character;
+} character_token;
 
 /// Data contained by the token
 typedef union {
     doctype_token   doctype;
     tag_token       tag;
-    data_token      data;
+    comment_token   comment;
+    character_token character;
 } token_data_t;
 
 /// Token type
@@ -164,13 +173,30 @@ typedef struct {
 } token_t;
 
 typedef struct {
+    token_t tokens[INTERNAL_QUEUE_SIZE];
+    size_t start;
+    size_t end;
+    size_t count;
+} internal_token_queue_t;
+
+typedef struct {
     insertion_state_t   insertion_state;
     data_state_t        data_state;
-} tokenizer_state_t;
+    data_state_t        return_state;
+    bool                consume_flag;
+
+    internal_token_queue_t internal_token_queue;
+} tokenizer_t;
 
 typedef struct open_elem_stack {
     struct open_elem_stack *next;
 } open_elem_stack_t;
+
+void queue_init(internal_token_queue_t* queue);
+int queue_pop(internal_token_queue_t* queue, const token_t* token);
+int queue_push(internal_token_queue_t* queue, const token_t* token);
+bool queue_is_empty(const internal_token_queue_t* queue);
+bool queue_is_full(const internal_token_queue_t* queue);
 
 bool is_void_element(token_t token);
 bool is_template_element(token_t token);
@@ -179,7 +205,22 @@ bool is_escapable_raw_text_element(token_t token);
 bool is_foreign_element(token_t token);
 bool is_normal_element(token_t token);
 
-int consume_character(FILE* stream, tokenizer_state_t state);
-dom_tree_node_t* tokenize(FILE* stream, tokenizer_state_t state);
+inline bool is_ascii_upper_alpha(int c);
+inline bool is_ascii_lower_alpha(int c);
+inline bool is_ascii_alpha(int c);
+
+int consume_character(FILE* stream);
+int reconsume_character(int character);
+token_t get_character_token(int c);
+token_t get_eof_token();
+int get_new_start_tag_token(token_t* out);
+int get_new_end_tag_token(token_t* out);
+int get_new_comment_token(token_t* out);
+
+/// ONLY called in the tree building stage!
+void destroy_token(token_t* token);
+
+int token_next(FILE* stream, tokenizer_t* tokenizer);
+dom_tree_node_t* tokenize(FILE* stream, tokenizer_t* tokenizer);
 
 #endif //HTML_PARSER_LEXER_H
