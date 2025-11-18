@@ -108,7 +108,39 @@ static const char* formatting_tags[] = {
     "u"
 };
 
-bool is_void_element(token_t token) {
+void queue_init(internal_token_queue_t* queue) {
+    queue->start = 0;
+    queue->end = 0;
+    queue->count = 0;
+}
+
+int queue_pop(internal_token_queue_t* queue, const token_t* token) {
+    if (queue_is_empty(queue) || !token) return 1;
+
+    token = &queue->tokens[queue->end];
+    queue->end = (++queue->end) % INTERNAL_QUEUE_SIZE;
+    queue->count--;
+    return 0;
+}
+
+int queue_push(internal_token_queue_t* queue, const token_t* token) {
+    if (queue_is_full(queue) || !token) return 1;
+
+    queue->tokens[queue->end] = *token;
+    queue->end = (++queue->end) % INTERNAL_QUEUE_SIZE;
+    queue->count++;
+    return 0;
+}
+
+bool queue_is_empty(const internal_token_queue_t* queue) {
+    return queue->count == 0;
+}
+
+bool queue_is_full(const internal_token_queue_t* queue) {
+    return queue->count == INTERNAL_QUEUE_SIZE;
+}
+
+bool is_void_element(const token_t token) {
     static const char* void_tags[] = {
         "area",
         "base",
