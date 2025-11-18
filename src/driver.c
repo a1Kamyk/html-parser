@@ -30,8 +30,13 @@ void run_parser(const int argc, char **argv) {
     }
 
     // Start tokenizer in default state
-    tokenizer_state_t tokenizer_state = {
+    tokenizer_t tokenizer = {
         .insertion_state = INITIAL,
-        .data_state = DATA_STATE
+        .data_state = DATA_STATE,
+        .return_state = DATA_STATE,
+        .consume_flag = true,
+
+        .internal_token_queue = {}
     };
+    queue_init(&tokenizer.internal_token_queue);
 }
