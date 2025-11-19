@@ -8,6 +8,39 @@
 static const size_t INITIAL_CHILD_CAPACITY = 4;
 static const size_t DYN_ARR_EXPANSION_COEFFICIENT = 2;
 
+inline int init_children_array(dom_tree_node_t* node) {
+    node->children = calloc(INITIAL_CHILD_CAPACITY, sizeof(dom_tree_node_t*));
+    if (!node->children) {
+        fprintf(stderr, "Out of memory allocating new child array");
+        return 1;
+    }
+
+    node->children_capacity = INITIAL_CHILD_CAPACITY;
+    node->children_amount = 0;
+
+    return 0;
+}
+
+dom_tree_node_t* create_root_node() {
+    dom_tree_node_t* root = calloc(1, sizeof(dom_tree_node_t));
+    if (!root) {
+        fprintf(stderr, "Out of memory allocating root node");
+        return NULL;
+    }
+
+    const int res = init_children_array(root);
+    if (res != 0) {
+        free(root);
+        return NULL;
+    }
+
+    root->type = DOM_ROOT;
+    root->data = 0;
+    root->parent = NULL;
+
+    return root;
+}
+
 dom_tree_node_t *create_tree_node(token_t* token) {
     dom_tree_node_t *node = calloc(1, sizeof(dom_tree_node_t));
     if (!node) {
@@ -16,13 +49,11 @@ dom_tree_node_t *create_tree_node(token_t* token) {
     }
 
     // TODO only create a children array if node not a text or comment type
-    node->children = calloc(INITIAL_CHILD_CAPACITY, sizeof(dom_tree_node_t*));
-    if (!node->children) {
-        fprintf(stderr, "Out of memory allocating new child array");
+    const int res = init_children_array(node);
+    if (res != 0) {
+        free(node);
         return NULL;
     }
-    node->children_capacity = INITIAL_CHILD_CAPACITY;
-    node->children_amount = 0;
 
     // TODO fix this basically
     switch (token->type) {

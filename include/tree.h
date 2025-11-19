@@ -41,7 +41,9 @@ typedef struct dom_tree_node {
     size_t              children_capacity;
 } dom_tree_node_t;
 
-dom_tree_node_t *create_tree_node(token_t* token);
+inline int init_children_array(dom_tree_node_t* node);
+dom_tree_node_t* create_root_node();
+dom_tree_node_t* create_tree_node(token_t* token);
 void add_child(dom_tree_node_t *parent, dom_tree_node_t *child);
 
 #endif //HTML_PARSER_TREE_H
