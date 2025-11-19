@@ -128,21 +128,21 @@ typedef enum {
 
 /// Attribute type
 typedef struct {
-    char*       name;
-    char*       value;
+    string_t    name;
+    string_t    value;
 } attribute_t;
 
 /// DOCTYPE token type
 typedef struct {
-    char*       name;
-    char*       public_id;
-    char*       system_id;
+    string_t    name;
+    string_t    public_id;
+    string_t    system_id;
     bool        force_quirks;
 } doctype_token;
 
 /// Start and End tags token type
 typedef struct {
-    char*       name;
+    string_t    name;
     bool        self_closing_flag;
     attribute_t*  attributes;
     size_t      attr_count;
@@ -150,7 +150,7 @@ typedef struct {
 
 /// Comment token type
 typedef struct {
-    char*       data;
+    string_t    data;
 } comment_token;
 
 /// Character token type
