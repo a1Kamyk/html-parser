@@ -12,6 +12,4 @@ typedef enum {
     PARSER_ERROR
 } errors;
 
-static const char* temp_dir = "temp/";
-
 #endif //HTML_PARSER_DEFINES_H

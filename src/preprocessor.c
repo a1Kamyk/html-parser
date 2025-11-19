@@ -48,27 +48,15 @@ static int remove_positions(const size_t* positions,
     return 0;
 }
 
-int normalize_newlines(const char* filename) {
-    FILE* stream = fopen(filename, "rb");
+int normalize_newlines(const char* filepath, const char* temp_filepath) {
+    FILE* stream = fopen(filepath, "rb");
     if (!stream) {
-        printf("Error opening file %s\n", filename);
-        return STDIO_ERROR;
-    }
-
-    char* temp_filepath = malloc(strlen(filename) + strlen(temp_dir) + 1);
-    if (!temp_filepath) return MEMORY_ERROR;
-    strcpy(temp_filepath, temp_dir);
-    strcat(temp_filepath, filename);
-    // Remove old temporary file if exists
-    int res = remove(temp_filepath);
-    if (res != 0 && errno != ENOENT) {
-        free(temp_filepath);
+        printf("Error opening file %s\n", filepath);
         return STDIO_ERROR;
     }
 
     FILE* new_stream = fopen(temp_filepath, "ab");
     if (!new_stream) {
-        free(temp_filepath);
         return STDIO_ERROR;
     }
 
@@ -80,9 +68,8 @@ int normalize_newlines(const char* filename) {
 
     while (c != EOF) {
         if (remove_count >= BUF_SIZE) {
-            res = remove_positions(remove_pos_buffer, remove_count, stream, new_stream, start_pos, curr_pos);
+            const int res = remove_positions(remove_pos_buffer, remove_count, stream, new_stream, start_pos, curr_pos);
             if (res != 0) {
-                free(temp_filepath);
                 fclose(stream);
                 return STDIO_ERROR;
             }
@@ -99,15 +86,13 @@ int normalize_newlines(const char* filename) {
     }
 
     if (remove_count != 0) {
-        res = remove_positions(remove_pos_buffer, remove_count, stream, new_stream, start_pos, curr_pos);
+        const int res = remove_positions(remove_pos_buffer, remove_count, stream, new_stream, start_pos, curr_pos);
         if (res != 0) {
-            free(temp_filepath);
             fclose(stream);
             return STDIO_ERROR;
         }
     }
 
-    free(temp_filepath);
     fclose(stream);
     return 0;
 }
