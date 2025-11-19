@@ -6,6 +6,18 @@
 
 #include "preprocessor.h"
 #include "tokenizer.h"
+#include "tree.h"
+
+dom_tree_node_t* parse_document(tokenizer_t* tokenizer) {
+    dom_tree_node_t* root = create_root_node();
+
+    if (token_next(tokenizer) != 0) {
+        // TODO cleanup
+        return NULL;
+    }
+
+    return root;
+}
 
 int run_parser(const int argc, char **argv) {
     // Check for command line arguments
@@ -44,7 +56,7 @@ int run_parser(const int argc, char **argv) {
         return 1;
     }
 
-    const FILE* stream = fopen(temp_filepath, "r");
+    FILE* stream = fopen(temp_filepath, "r");
     if (!stream) {
         free(temp_filepath);
         return 1;
@@ -56,12 +68,17 @@ int run_parser(const int argc, char **argv) {
         .data_state = DATA_STATE,
         .return_state = DATA_STATE,
         .consume_flag = true,
+        .current_char = '\0',
 
-        .internal_token_queue = {}
+        .pending_token = { .type = NONE },
+        .has_pending_token = false,
+
+        .internal_token_queue = {},
+        .stream = stream
     };
     queue_init(&tokenizer.internal_token_queue);
 
-    dom_tree_node_t* dom_root = tokenize(stream, &tokenizer);
+    dom_tree_node_t* dom_root = parse_document(&tokenizer);
 
     return 0;
 }
