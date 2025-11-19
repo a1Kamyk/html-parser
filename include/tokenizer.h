@@ -4,9 +4,18 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#include "misc.h"
+
 #define INTERNAL_QUEUE_SIZE  8
 
 typedef struct dom_tree_node dom_tree_node_t;
+
+typedef enum {
+    TOKEN_OK,
+    TOKEN_ERROR,
+    TOKEN_PARSE_ERROR,
+    TOKEN_RECONSUME
+} token_result_t;
 
 /// tokenizer state machine insertion states
 typedef enum {
@@ -118,7 +127,8 @@ typedef enum {
 
 /// Token types
 typedef enum {
-    DOCTYPE = 0,
+    NONE = 0,
+    DOCTYPE,
     START_TAG,
     END_TAG,
     COMMENT,
@@ -180,12 +190,20 @@ typedef struct {
 } internal_token_queue_t;
 
 typedef struct {
+    /// Tokenizer state
     insertion_state_t   insertion_state;
     data_state_t        data_state;
     data_state_t        return_state;
     bool                consume_flag;
+    int                 current_char;
 
+    /// Token being constructed if more than one steps needed
+    token_t             pending_token;
+    bool                has_pending_token;
+
+    /// Helper and miscellaneous fields
     internal_token_queue_t internal_token_queue;
+    FILE* stream;
 } tokenizer_t;
 
 typedef struct open_elem_stack {
@@ -209,8 +227,8 @@ inline bool is_ascii_upper_alpha(int c);
 inline bool is_ascii_lower_alpha(int c);
 inline bool is_ascii_alpha(int c);
 
-int consume_character(FILE* stream);
-int reconsume_character(int character);
+void consume_character(tokenizer_t* tokenizer);
+void reconsume_character(tokenizer_t* tokenizer);
 token_t get_character_token(int c);
 token_t get_eof_token();
 int get_new_start_tag_token(token_t* out);
@@ -220,7 +238,19 @@ int get_new_comment_token(token_t* out);
 /// ONLY called in the tree building stage!
 void destroy_token(token_t* token);
 
-int token_next(FILE* stream, tokenizer_t* tokenizer);
-dom_tree_node_t* tokenize(FILE* stream, tokenizer_t* tokenizer);
+token_result_t push_token(tokenizer_t* tokenizer, const token_t* token);
+token_result_t pop_token(tokenizer_t* tokenizer, token_t* out);
+
+/// State handling functions
+token_result_t handle_data_state(tokenizer_t* tokenizer);
+token_result_t handle_rcdata_state(tokenizer_t* tokenizer);
+token_result_t handle_rawtext_state(tokenizer_t* tokenizer);
+token_result_t handle_script_data_state(tokenizer_t* tokenizer);
+token_result_t handle_plaintext_state(tokenizer_t* tokenizer);
+token_result_t handle_tag_open_state(tokenizer_t* tokenizer);
+token_result_t handle_end_tag_open_state(tokenizer_t* tokenizer);
+token_result_t handle_tag_name_state(tokenizer_t* tokenizer);
+
+int token_next(tokenizer_t* tokenizer);
 
 #endif //HTML_PARSER_LEXER_H

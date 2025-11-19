@@ -1,12 +1,20 @@
 #include "tokenizer.h"
 
+#include <assert.h>
 #include <string.h>
 
 #include "misc.h"
 
+#define NULL_CHARACTER          0x0000
+#define CHARACTER_TABULATION    0x0009
+#define LINE_FEED               0x000A
+#define FORM_FEED               0x000C
+#define SPACE                   0x0020
+
 #define REPLACEMENT_CHARACTER   0xFFFD
-#define LESS_THAN_SIGN          0x003C
 #define SOLIDUS                 0x002F
+#define LESS_THAN_SIGN          0x003C
+#define GREATER_THAN_SIGN       0x003E
 
 static const char* special_tags[] = {
     "address",
@@ -194,16 +202,17 @@ bool is_foreign_element(token_t token) {
     // TODO make this work
     return false;
 }
+
 bool is_normal_element(token_t token) {
     // TODO and this
     return false;
 }
 
-bool is_ascii_upper_alpha(const int c) {
+inline bool is_ascii_upper_alpha(const int c) {
     return (0x0041 <= c && c <= 0x005A);
 }
 
-bool is_ascii_lower_alpha(const int c) {
+inline bool is_ascii_lower_alpha(const int c) {
     return (0x0061 <= c && c <= 0x007A);
 }
 
@@ -211,12 +220,12 @@ inline bool is_ascii_alpha(const int c) {
     return (is_ascii_upper_alpha(c) && is_ascii_lower_alpha(c));
 }
 
-int consume_character(FILE* stream) {
-    return fgetc(stream);
+void consume_character(tokenizer_t* tokenizer) {
+    tokenizer->current_char = fgetc(tokenizer->stream);
 }
 
-int reconsume_character(const int character) {
-    return character;
+void reconsume_character(tokenizer_t* tokenizer) {
+    tokenizer->consume_flag = true;
 }
 
 token_t get_character_token(const int c) {
@@ -299,269 +308,349 @@ void destroy_token(token_t* token) {
     }
 }
 
-// TODO proper error naming
-int token_next(FILE* stream, tokenizer_t* tokenizer) {
-    int c = {};
-    goto consume;
+token_result_t push_token(tokenizer_t* tokenizer, const token_t* token) {
+    if (queue_push(&tokenizer->internal_token_queue, token) != 0 )
+        return TOKEN_ERROR;
+    return TOKEN_OK;
+}
 
-    reconsume:
-    tokenizer->consume_flag = false;
-    consume:
-    switch (tokenizer->data_state) {
-        case DATA_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case '&':
-                    tokenizer->return_state = DATA_STATE;
-                    tokenizer->data_state = CHARACTER_REFERENCE_STATE;
-                    return 0;
-                case '<':
-                    tokenizer->data_state = TAG_OPEN_STATE;
-                    return 0;;
-                case 0x00: {
-                    // TODO `unexpected-null-character parse error`
-                    const token_t token = get_character_token(0);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;;
-                }
-                case EOF: {
-                    const token_t token = get_eof_token();
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    const token_t token =  get_character_token(c);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-            }
+token_result_t handle_data_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case '&':
+            tokenizer->return_state = DATA_STATE;
+            tokenizer->data_state = CHARACTER_REFERENCE_STATE;
+            return TOKEN_OK;
+        case '<':
+            tokenizer->data_state = TAG_OPEN_STATE;
+            return TOKEN_OK;
+        case NULL_CHARACTER: {
+            // TODO `unexpected-null-character parse error`
+            const token_t token = get_character_token(0);
+            return push_token(tokenizer, &token);
         }
-        case RCDATA_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case '&':
-                    tokenizer->return_state = RCDATA_STATE;
-                    tokenizer->data_state = CHARACTER_REFERENCE_STATE;
-                    return 0;
-                case '<':
-                    tokenizer->data_state = RCDATA_LESS_THAN_SIGN_STATE;
-                    return 0;
-                case 0x00: {
-                    // TODO `unexpected-null-character` parse error
-                    const token_t token =  get_character_token(REPLACEMENT_CHARACTER);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                case EOF: {
-                    const token_t token = get_eof_token();
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    const token_t token = get_character_token(c);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-            }
-        }
-            case RAWTEXT_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case '<':
-                    tokenizer->data_state = RAWTEXT_LESS_THAN_SIGN_STATE;
-                    return 0;
-                case 0x00: {
-                    // TODO `unexpected-null-character` parse error
-                    const token_t token = get_character_token(REPLACEMENT_CHARACTER);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                case EOF: {
-                    const token_t token = get_eof_token();
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    const token_t token = get_character_token(c);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-            }
-        }
-        case SCRIPT_DATA_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case '<':
-                    tokenizer->data_state = SCRIPT_DATA_LESS_THAN_SIGN_STATE;
-                    return 0;
-                case 0x00: {
-                    const token_t token = get_character_token(REPLACEMENT_CHARACTER);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                case EOF: {
-                    const token_t token = get_eof_token();
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    const token_t token = get_character_token(c);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-            }
-        }
-        case PLAINTEXT_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case 0x00: {
-                    const token_t token = get_character_token(REPLACEMENT_CHARACTER);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                case EOF: {
-                    const token_t token = get_eof_token();
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    const token_t token = get_character_token(c);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    return 0;
-                }
-            }
-        }
-        case TAG_OPEN_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case '!':
-                    tokenizer->data_state = MARKUP_DECLARATION_OPEN_STATE;
-                    return 0;
-                case '/':
-                    tokenizer->data_state = END_TAG_OPEN_STATE;
-                    return 0;
-                case '?': {
-                    // TODO `unexpected-question-mark-instead-of-tag-name` parse error
-                    token_t token;
-                    if (get_new_comment_token(&token) != 0) {
-                        fprintf(stderr, "Error creating new comment token");
-                        return 1;
-                    }
-                    tokenizer->data_state = BOGUS_COMMENT_STATE;
-                    goto reconsume;
-                }
-                case EOF: {
-                    // TODO `eof-before-tag-name` parse error
-                    const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
-                    const token_t eof_token = get_eof_token();
-                    if (queue_push(&tokenizer->internal_token_queue, &less_than_sign_token) != 0 ||
-                        queue_push(&tokenizer->internal_token_queue, &eof_token) != 0)
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    if (is_ascii_alpha(c)) {
-                        token_t token;
-                        if (get_new_start_tag_token(&token) != 0) {
-                            fprintf(stderr, "Error creating new start tag token");
-                            return 1;
-                        }
-                        tokenizer->data_state = TAG_NAME_STATE;
-                        goto reconsume;
-                    }
-                    // TODO `invalid-first-character-of-tag-name` parse error
-                    const token_t token = get_character_token(LESS_THAN_SIGN);
-                    if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
-                        return 1;
-                    tokenizer->data_state = DATA_STATE;
-                    goto reconsume;
-                }
-            }
-        }
-        case END_TAG_OPEN_STATE: {
-            if (tokenizer->consume_flag)
-                c = consume_character(stream);
-            else
-                tokenizer->consume_flag = true;
-            switch (c) {
-                case '>': {
-                    // TODO `missing-end-tag-name` parse error
-                    tokenizer->data_state = DATA_STATE;
-                    return 0;
-                }
-                case EOF: {
-                    // TODO `eof-before-tag-name` parse error
-                    const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
-                    const token_t solidus_token = get_character_token(SOLIDUS);
-                    if (queue_push(&tokenizer->internal_token_queue, &solidus_token) != 0 ||
-                        queue_push(&tokenizer->internal_token_queue, &less_than_sign_token) != 0)
-                        return 1;
-                    return 0;
-                }
-                default: {
-                    if (is_ascii_alpha(c)) {
-                        token_t token;
-                        if (get_new_end_tag_token(&token) != 0) {
-                            fprintf(stderr, "Error creating new end tag token");
-                            return 1;
-                        }
-                        tokenizer->data_state = TAG_NAME_STATE;
-                        goto reconsume;
-                    }
-                    // TODO `invalid-first-character-of-tag-name` parse error
-                    token_t token;
-                    if (get_new_comment_token(&token) != 0) {
-                        fprintf(stderr, "Error creating new comment token");
-                        return 1;
-                    }
-                    tokenizer->data_state = BOGUS_COMMENT_STATE;
-                    goto reconsume;
-                }
-            }
+        case EOF: {
+            const token_t token = get_eof_token();
+            if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
+                return TOKEN_ERROR;
+            return TOKEN_OK;
         }
         default: {
-            printf("Unknown or unhandled tokenizer state");
-            return 0;
+            const token_t token =  get_character_token(c);
+            return push_token(tokenizer, &token);
         }
     }
 }
 
-dom_tree_node_t* tokenize(FILE* stream, tokenizer_t* tokenizer) {
-    dom_tree_node_t* root = NULL;
+token_result_t handle_rcdata_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
 
-    token_next(stream, tokenizer);
-    return NULL;
+    switch (c) {
+        case '&':
+            tokenizer->return_state = RCDATA_STATE;
+            tokenizer->data_state = CHARACTER_REFERENCE_STATE;
+            return TOKEN_OK;
+        case '<':
+            tokenizer->data_state = RCDATA_LESS_THAN_SIGN_STATE;
+            return TOKEN_OK;
+        case NULL_CHARACTER: {
+            // TODO `unexpected-null-character` parse error
+            const token_t token =  get_character_token(REPLACEMENT_CHARACTER);
+            return push_token(tokenizer, &token);
+        }
+        case EOF: {
+            const token_t token = get_eof_token();
+            return push_token(tokenizer, &token);
+        }
+        default: {
+            const token_t token = get_character_token(c);
+            return push_token(tokenizer, &token);
+        }
+    }
+}
+
+token_result_t handle_rawtext_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case '<':
+            tokenizer->data_state = RAWTEXT_LESS_THAN_SIGN_STATE;
+            return TOKEN_OK;
+        case NULL_CHARACTER: {
+            // TODO `unexpected-null-character` parse error
+            const token_t token = get_character_token(REPLACEMENT_CHARACTER);
+            return push_token(tokenizer, &token);
+        }
+        case EOF: {
+            const token_t token = get_eof_token();
+            return push_token(tokenizer, &token);
+        }
+        default: {
+            const token_t token = get_character_token(c);
+            return push_token(tokenizer, &token);
+        }
+    }
+}
+
+token_result_t handle_script_data_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case '<':
+            tokenizer->data_state = SCRIPT_DATA_LESS_THAN_SIGN_STATE;
+            return TOKEN_OK;
+        case NULL_CHARACTER: {
+            const token_t token = get_character_token(REPLACEMENT_CHARACTER);
+            if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        case EOF: {
+            const token_t token = get_eof_token();
+            return push_token(tokenizer, &token);
+        }
+        default: {
+            const token_t token = get_character_token(c);
+            return push_token(tokenizer, &token);
+        }
+    }
+}
+
+token_result_t handle_plaintext_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case NULL_CHARACTER: {
+            const token_t token = get_character_token(REPLACEMENT_CHARACTER);
+            return push_token(tokenizer, &token);
+        }
+        case EOF: {
+            const token_t token = get_eof_token();
+            return push_token(tokenizer, &token);
+        }
+        default: {
+            const token_t token = get_character_token(c);
+            return push_token(tokenizer, &token);
+        }
+    }
+}
+
+token_result_t handle_tag_open_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case '!':
+            tokenizer->data_state = MARKUP_DECLARATION_OPEN_STATE;
+            return TOKEN_OK;
+        case '/':
+            tokenizer->data_state = END_TAG_OPEN_STATE;
+            return TOKEN_OK;
+        case '?': {
+            // TODO `unexpected-question-mark-instead-of-tag-name` parse error
+            if (get_new_comment_token(&tokenizer->pending_token) != 0) {
+                fprintf(stderr, "Error creating new comment token");
+                return TOKEN_ERROR;
+            }
+            tokenizer->has_pending_token = true;
+            tokenizer->data_state = BOGUS_COMMENT_STATE;
+            tokenizer->consume_flag = false;
+            return TOKEN_RECONSUME;
+        }
+        case EOF: {
+            // TODO `eof-before-tag-name` parse error
+            const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
+            const token_t eof_token = get_eof_token();
+            if (push_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
+                push_token(tokenizer, &eof_token) != TOKEN_OK)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        default: {
+            if (is_ascii_alpha(c)) {
+                if (get_new_start_tag_token(&tokenizer->pending_token) != 0) {
+                    fprintf(stderr, "Error creating new start tag token");
+                    return TOKEN_ERROR;
+                }
+                tokenizer->has_pending_token = true;
+                tokenizer->data_state = TAG_NAME_STATE;
+                tokenizer->consume_flag = false;
+                return TOKEN_RECONSUME;
+            }
+            // TODO `invalid-first-character-of-tag-name` parse error
+            const token_t token = get_character_token(LESS_THAN_SIGN);
+            if (push_token(tokenizer, &token) == TOKEN_ERROR)
+                return TOKEN_ERROR;
+            tokenizer->data_state = DATA_STATE;
+            tokenizer->consume_flag = false;
+            return TOKEN_RECONSUME;
+        }
+    }
+}
+
+token_result_t handle_end_tag_open_state(tokenizer_t* tokenizer) {
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case '>': {
+            // TODO `missing-end-tag-name` parse error
+            tokenizer->data_state = DATA_STATE;
+            return TOKEN_OK;
+        }
+        case EOF: {
+            // TODO `eof-before-tag-name` parse error
+            const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
+            const token_t solidus_token = get_character_token(SOLIDUS);
+            const token_t eof_token = get_eof_token();
+            if (push_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
+                push_token(tokenizer, &solidus_token) != TOKEN_OK ||
+                push_token(tokenizer, &eof_token) != TOKEN_OK)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        default: {
+            if (is_ascii_alpha(c)) {
+                if (get_new_end_tag_token(&tokenizer->pending_token) != 0) {
+                    fprintf(stderr, "Error creating new end tag token");
+                    return TOKEN_ERROR;
+                }
+                tokenizer->has_pending_token = true;
+                tokenizer->data_state = TAG_NAME_STATE;
+                tokenizer->consume_flag = false;
+                return TOKEN_RECONSUME;
+            }
+            // TODO `invalid-first-character-of-tag-name` parse error
+            if (get_new_comment_token(&tokenizer->pending_token) != 0) {
+                fprintf(stderr, "Error creating new comment token");
+                return TOKEN_ERROR;
+            }
+            tokenizer->has_pending_token = true;
+            tokenizer->data_state = BOGUS_COMMENT_STATE;
+            tokenizer->consume_flag = false;
+            return TOKEN_RECONSUME;
+        }
+    }
+}
+
+token_result_t handle_tag_name_state(tokenizer_t* tokenizer) {
+    assert( tokenizer->has_pending_token == true &&
+            (tokenizer->pending_token.type == START_TAG ||
+            tokenizer->pending_token.type == END_TAG));
+
+    if (tokenizer->consume_flag)
+        consume_character(tokenizer);
+    else
+        reconsume_character(tokenizer);
+    const int c = tokenizer->current_char;
+
+    switch (c) {
+        case CHARACTER_TABULATION:
+        case LINE_FEED:
+        case FORM_FEED:
+        case SPACE: {
+            tokenizer->data_state = BEFORE_ATTRIBUTE_NAME_STATE;
+            return TOKEN_OK;
+        }
+        case SOLIDUS: {
+            tokenizer->data_state = SELF_CLOSING_START_TAG_STATE;
+            return TOKEN_OK;
+        }
+        case '>': {
+            tokenizer->data_state = DATA_STATE;
+            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK)
+                return TOKEN_ERROR;
+            tokenizer->has_pending_token = false;
+            return TOKEN_OK;
+        }
+        case NULL_CHARACTER: {
+            // TODO `unexpected-null-character` parse error
+            if (append_char(&tokenizer->pending_token.data.tag.name, REPLACEMENT_CHARACTER) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        case EOF: {
+            const token_t token = get_eof_token();
+            return push_token(tokenizer, &token);
+        }
+        default: {
+            if (append_char(&tokenizer->pending_token.data.tag.name, c | 0x0020) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+    }
+}
+
+// TODO proper error naming
+int token_next(tokenizer_t* tokenizer) {
+    token_result_t result = TOKEN_OK;
+    do {
+        switch (tokenizer->data_state) {
+            case DATA_STATE: {
+                result = handle_data_state(tokenizer);
+                break;
+            }
+            case RCDATA_STATE: {
+                result = handle_rcdata_state(tokenizer);
+                break;
+            }
+            case RAWTEXT_STATE: {
+                result = handle_rawtext_state(tokenizer);
+                break;
+            }
+            case SCRIPT_DATA_STATE: {
+                result = handle_script_data_state(tokenizer);
+                break;
+            }
+            case PLAINTEXT_STATE: {
+                result = handle_plaintext_state(tokenizer);
+                break;
+            }
+            case TAG_OPEN_STATE: {
+                result = handle_tag_open_state(tokenizer);
+                break;
+            }
+            case END_TAG_OPEN_STATE: {
+                result = handle_end_tag_open_state(tokenizer);
+                break;
+            }
+            case TAG_NAME_STATE: {
+                result = handle_tag_open_state(tokenizer);
+            }
+            default: {
+                printf("Unknown or unhandled tokenizer state");
+                result = TOKEN_ERROR;
+                break;
+            }
+        }
+    }
+    while (result == TOKEN_RECONSUME);
+    return result;
 }
