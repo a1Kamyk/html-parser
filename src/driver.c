@@ -8,6 +8,8 @@
 #include "tokenizer.h"
 #include "tree.h"
 
+#define TEMPORARY_BUFFER_SIZE 32
+
 dom_tree_node_t* parse_document(tokenizer_t* tokenizer) {
     dom_tree_node_t* root = create_root_node();
 
@@ -72,11 +74,13 @@ int run_parser(const int argc, char **argv) {
 
         .pending_token = { .type = NONE },
         .has_pending_token = false,
+        .temporary_buffer = {},
 
         .internal_token_queue = {},
         .stream = stream
     };
     queue_init(&tokenizer.internal_token_queue);
+    parser_string_init_sized(&tokenizer.temporary_buffer, TEMPORARY_BUFFER_SIZE);
 
     dom_tree_node_t* dom_root = parse_document(&tokenizer);
 

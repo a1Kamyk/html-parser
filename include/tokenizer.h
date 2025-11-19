@@ -197,9 +197,10 @@ typedef struct {
     bool                consume_flag;
     int                 current_char;
 
-    /// Token being constructed if more than one steps needed
+    /// Temporary storage fields
     token_t             pending_token;
     bool                has_pending_token;
+    string_t            temporary_buffer;
 
     /// Helper and miscellaneous fields
     internal_token_queue_t internal_token_queue;
@@ -211,7 +212,7 @@ typedef struct open_elem_stack {
 } open_elem_stack_t;
 
 void queue_init(internal_token_queue_t* queue);
-int queue_pop(internal_token_queue_t* queue, const token_t* token);
+int queue_pop(internal_token_queue_t* queue, const token_t* out);
 int queue_push(internal_token_queue_t* queue, const token_t* token);
 bool queue_is_empty(const internal_token_queue_t* queue);
 bool queue_is_full(const internal_token_queue_t* queue);
@@ -222,10 +223,6 @@ bool is_raw_text_element(token_t token);
 bool is_escapable_raw_text_element(token_t token);
 bool is_foreign_element(token_t token);
 bool is_normal_element(token_t token);
-
-inline bool is_ascii_upper_alpha(int c);
-inline bool is_ascii_lower_alpha(int c);
-inline bool is_ascii_alpha(int c);
 
 void consume_character(tokenizer_t* tokenizer);
 void reconsume_character(tokenizer_t* tokenizer);
@@ -250,6 +247,9 @@ token_result_t handle_plaintext_state(tokenizer_t* tokenizer);
 token_result_t handle_tag_open_state(tokenizer_t* tokenizer);
 token_result_t handle_end_tag_open_state(tokenizer_t* tokenizer);
 token_result_t handle_tag_name_state(tokenizer_t* tokenizer);
+token_result_t handle_rcdata_less_than_sign_state(tokenizer_t* tokenizer);
+token_result_t handle_rcdata_end_tag_open_state(tokenizer_t* tokenizer);
+token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer);
 
 int token_next(tokenizer_t* tokenizer);
 
