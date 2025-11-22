@@ -17,6 +17,119 @@ typedef enum {
     TOKEN_RECONSUME
 } token_result_t;
 
+/// Parse errors
+typedef enum {
+    NO_ERROR = 0,
+    ABRUPT_CLOSING_OF_EMPTY_COMMENT,
+    ABRUPT_DOCTYPE_PUBLIC_IDENTIFIER,
+    ABRUPT_DOCTYPE_SYSTEM_IDENTIFIER,
+    ABSENCE_OF_DIGITS_IN_NUMERIC_CHARACTER_REFERENCE,
+    CDATA_IN_HTML_CONTENT,
+    CHARACTER_REFERENCE_OUTSIDE_UNICODE_RANGE,
+    CONTROL_CHARACTER_IN_INPUT_STREAM,
+    CONTROL_CHARACTER_REFERENCE,
+    DUPLICATE_ATTRIBUTE,
+    END_TAG_WITH_ATTRIBUTES,
+    END_TAG_WITH_TRAILING_SOLIDUS,
+    EOF_BEFORE_TAG_NAME,
+    EOF_IN_CDATA,
+    EOF_IN_COMMENT,
+    EOF_IN_DOCTYPE,
+    EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT,
+    EOF_IN_TAG,
+    INCORRECTLY_CLOSED_COMMENT,
+    INCORRECTLY_OPENED_COMMENT,
+    INVALID_CHARACTER_SEQUENCE_AFTER_DOCTYPE_NAME,
+    INVALID_FIRST_CHARACTER_OF_TAG_NAME,
+    MISSING_ATTRIBUTE_VALUE,
+    MISSING_DOCTYPE_NAME,
+    MISSING_DOCTYPE_PUBLIC_IDENTIFIER,
+    MISSING_DOCTYPE_SYSTEM_IDENTIFIER,
+    MISSING_END_TAG_NAME,
+    MISSING_QUOTE_BEFORE_DOCTYPE_PUBLIC_IDENTIFIER,
+    MISSING_QUOTE_BEFORE_DOCTYPE_SYSTEM_IDENTIFIER,
+    MISSING_SEMICOLON_AFTER_CHARACTER_REFERENCE,
+    MISSING_WHITESPACE_AFTER_DOCTYPE_PUBLIC_KEYWORD,
+    MISSING_WHITESPACE_AFTER_DOCTYPE_SYSTEM_KEYWORD,
+    MISSING_WHITESPACE_BEFORE_DOCTYPE_NAME,
+    MISSING_WHITESPACE_BETWEEN_ATTRIBUTES,
+    MISSING_WHITESPACE_BETWEEN_DOCTYPE_PUBLIC_AND_SYSTEM_IDENTIFIERS,
+    NESTED_COMMENT,
+    NONCHARACTER_CHARACTER_REFERENCE,
+    NONCHARACTER_IN_INPUT_STREAM,
+    NON_VOID_HTML_ELEMENT_START_TAG_WITH_TRAILING_SOLIDUS,
+    NULL_CHARACTER_REFERENCE,
+    SURROGATE_CHARACTER_REFERENCE,
+    SURROGATE_IN_INPUT_STREAM,
+    UNEXPECTED_CHARACTER_AFTER_DOCTYPE_SYSTEM_IDENTIFIER,
+    UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME,
+    UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE,
+    UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME,
+    UNEXPECTED_NULL_CHARACTER,
+    UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME,
+    UNEXPECTED_SOLIDUS_IN_TAG,
+    UNKNOWN_NAMED_CHARACTER_REFERENCE,
+    PARSE_ERROR_COUNT
+} parse_error_t;
+
+static const char* parse_error_to_string(parse_error_t error_code) {
+    static const char* parse_errors[PARSE_ERROR_COUNT] = {
+        "no-error",
+        "abrupt-closing-of-empty-comment",
+        "abrupt-doctype-public-identifier",
+        "abrupt-doctype-system-identifier",
+        "absence-of-digits-in-numeric-character-reference",
+        "cdata-in-html-content",
+        "character-reference-outside-unicode-range",
+        "control-character-in-input-stream",
+        "control-character-reference",
+        "duplicate-attribute",
+        "end-tag-with-attributes",
+        "end-tag-with-trailing-solidus",
+        "eof-before-tag-name",
+        "eof-in-cdata",
+        "eof-in-comment",
+        "eof-in-doctype",
+        "eof-in-script-html-comment-like-text",
+        "eof-in-tag",
+        "incorrectly-closed-comment",
+        "incorrectly-opened-comment",
+        "invalid-character-sequence-after-doctype-name",
+        "invalid-first-character-of-tag-name",
+        "missing-attribute-value",
+        "missing-doctype-name",
+        "missing-doctype-public-identifier",
+        "missing-doctype-system-identifier",
+        "missing-end-tag-name",
+        "missing-quote-before-doctype-public-identifier",
+        "missing-quote-before-doctype-system-identifier",
+        "missing-semicolon-after-character-reference",
+        "missing-whitespace-after-doctype-public-keyword",
+        "missing-whitespace-after-doctype-system-keyword",
+        "missing-whitespace-before-doctype-name",
+        "missing-whitespace-between-attributes",
+        "missing-whitespace-between-doctype-public-and-system-identifiers",
+        "nested-comment",
+        "noncharacter-character-reference",
+        "noncharacter-in-input-stream",
+        "non-void-html-element-start-tag-with-trailing-solidus",
+        "null-character-reference",
+        "surrogate-character-reference",
+        "surrogate-in-input-stream",
+        "unexpected-character-after-doctype-system-identifier",
+        "unexpected-character-in-attribute-name",
+        "unexpected-character-in-unquoted-attribute-value",
+        "unexpected-equals-sign-before-attribute-name",
+        "unexpected-null-character",
+        "unexpected-question-mark-instead-of-tag-name",
+        "unexpected-solidus-in-tag",
+        "unknown-named-character-reference"
+    };
+    if (error_code >= PARSE_ERROR_COUNT)
+        return "unknown parse error";
+    return parse_errors[error_code];
+}
+
 /// tokenizer state machine insertion states
 typedef enum {
     INITIAL = 0,
@@ -201,10 +314,12 @@ typedef struct {
     token_t             pending_token;
     bool                has_pending_token;
     string_t            temporary_buffer;
+    parse_error_t       last_error;
 
     /// Helper and miscellaneous fields
     internal_token_queue_t internal_token_queue;
     FILE* stream;
+    size_t chars_consumed;
 } tokenizer_t;
 
 typedef struct open_elem_stack {
@@ -250,6 +365,9 @@ token_result_t handle_tag_name_state(tokenizer_t* tokenizer);
 token_result_t handle_rcdata_less_than_sign_state(tokenizer_t* tokenizer);
 token_result_t handle_rcdata_end_tag_open_state(tokenizer_t* tokenizer);
 token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer);
+
+token_result_t handle_before_attribute_name_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_name_state(tokenizer_t* tokenizer);
 
 int token_next(tokenizer_t* tokenizer);
 

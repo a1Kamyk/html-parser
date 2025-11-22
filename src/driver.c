@@ -75,9 +75,11 @@ int run_parser(const int argc, char **argv) {
         .pending_token = { .type = NONE },
         .has_pending_token = false,
         .temporary_buffer = {},
+        .last_error = NO_ERROR,
 
         .internal_token_queue = {},
-        .stream = stream
+        .stream = stream,
+        .chars_consumed = 0
     };
     queue_init(&tokenizer.internal_token_queue);
     parser_string_init_sized(&tokenizer.temporary_buffer, TEMPORARY_BUFFER_SIZE);
