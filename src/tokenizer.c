@@ -4,153 +4,38 @@
 
 #include "misc.h"
 
-#define NULL_CHARACTER          0x0000
-#define CHARACTER_TABULATION    0x0009
-#define LINE_FEED               0x000A
-#define FORM_FEED               0x000C
-#define SPACE                   0x0020
-
-#define REPLACEMENT_CHARACTER   0xFFFD
-#define SOLIDUS                 0x002F
-#define LESS_THAN_SIGN          0x003C
-#define GREATER_THAN_SIGN       0x003E
-#define QUOTATION_MARK          0x0022
-#define APOSTROPHE              0x0027
-
-// TODO move these to tree construction stage
-static const char* special_tags[] = {
-    "address",
-    "applet",
-    "area",
-    "article",
-    "aside",
-    "base",
-    "basefont",
-    "bgsound",
-    "blockquote",
-    "body",
-    "br",
-    "button",
-    "caption",
-    "center",
-    "col",
-    "colgroup",
-    "dd",
-    "details",
-    "dir",
-    "div",
-    "dl",
-    "dt",
-    "embed",
-    "fieldset",
-    "figcaption",
-    "figure",
-    "footer",
-    "form",
-    "frame",
-    "frameset",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "head",
-    "header",
-    "hgroup",
-    "hr",
-    "html",
-    "iframe",
-    "img",
-    "input",
-    "keygen",
-    "li",
-    "link",
-    "listing",
-    "main",
-    "marquee",
-    "menu",
-    "meta",
-    "nav",
-    "noembed",
-    "noframes",
-    "noscript",
-    "object",
-    "ol",
-    "p",
-    "param",
-    "plaintext",
-    "pre",
-    "script",
-    "search",
-    "section",
-    "select",
-    "source",
-    "style",
-    "summary",
-    "table",
-    "tbody",
-    "td",
-    "template",
-    "textarea",
-    "tfoot",
-    "th",
-    "thead",
-    "title",
-    "tr",
-    "track",
-    "ul",
-    "wbr",
-    "xmp"
-};
-
-static const char* formatting_tags[] = {
-    "a",
-    "b",
-    "big",
-    "code",
-    "em",
-    "font",
-    "i",
-    "nobr",
-    "s",
-    "small",
-    "strike",
-    "strong",
-    "tt",
-    "u"
-};
-
-void queue_init(internal_token_queue_t* queue) {
+void queue_init(token_queue_t* queue) {
     queue->start = 0;
     queue->end = 0;
     queue->count = 0;
 }
 
-int queue_pop(internal_token_queue_t* queue, const token_t* out) {
-    if (queue_is_empty(queue)) return 1;
+int queue_pop(token_queue_t* queue, token_t* out) {
+    if (!queue || !out || queue_is_empty(queue))
+        return 1;
 
-    out = &queue->tokens[queue->end];
-    queue->end = (++queue->end) % INTERNAL_QUEUE_SIZE;
+    // caller takes ownership of the token and must delete it later
+    *out = queue->tokens[queue->end];
+    queue->end = (--queue->end) % TOKEN_QUEUE_SIZE;
     queue->count--;
     return 0;
 }
 
-int queue_push(internal_token_queue_t* queue, const token_t* token) {
+int queue_push(token_queue_t* queue, const token_t* token) {
     if (queue_is_full(queue) || !token) return 1;
 
     queue->tokens[queue->end] = *token;
-    queue->end = (++queue->end) % INTERNAL_QUEUE_SIZE;
+    queue->end = (++queue->end) % TOKEN_QUEUE_SIZE;
     queue->count++;
     return 0;
 }
 
-bool queue_is_empty(const internal_token_queue_t* queue) {
+bool queue_is_empty(const token_queue_t* queue) {
     return queue->count == 0;
 }
 
-bool queue_is_full(const internal_token_queue_t* queue) {
-    return queue->count == INTERNAL_QUEUE_SIZE;
+bool queue_is_full(const token_queue_t* queue) {
+    return queue->count == TOKEN_QUEUE_SIZE;
 }
 
 bool is_void_element(const token_t token) {
@@ -238,8 +123,7 @@ int get_new_start_tag_token(token_t* out) {
     out->type = START_TAG;
     if (parser_string_init(&out->data.tag.name) != 0)
         return 1;
-    out->data.tag.attr_count = 0;
-    out->data.tag.attributes = NULL;
+    out->data.tag.attributes = (attribute_list_t){0};
 
     return 0;
 }
@@ -248,59 +132,21 @@ int get_new_end_tag_token(token_t* out) {
     out->type = END_TAG;
     if (parser_string_init(&out->data.tag.name) != 0)
         return 1;
-    out->data.tag.attr_count = 0;
-    out->data.tag.attributes = NULL;
+    out->data.tag.attributes = (attribute_list_t){0};
 
     return 0;
 }
 
 int get_new_comment_token(token_t* out) {
     out->type = COMMENT;
-    if (parser_string_init(&out->data.comment.data) != 0)
+    if (parser_string_init(&out->data.comment.text) != 0)
         return 1;
 
     return 0;
 }
 
-void destroy_token(token_t* token) {
-    if (!token) return;
-    switch (token->type) {
-        case DOCTYPE: {
-            doctype_token* token_data = &token->data.doctype;
-            parser_string_delete(&token_data->name);
-            parser_string_delete(&token_data->public_id);
-            parser_string_delete(&token_data->system_id);
-            return;
-        }
-        case START_TAG:
-        case END_TAG: {
-            tag_token* token_data = &token->data.tag;
-            parser_string_delete(&token_data->name);
-            for (size_t i = 0; i < token_data->attr_count; i++) {
-                attribute_t* attribute = &token_data->attributes[i];
-                parser_string_delete(&attribute->name);
-                parser_string_delete(&attribute->value);
-            }
-            free(token_data->attributes);
-            return;
-        }
-        case COMMENT: {
-            comment_token* token_data = &token->data.comment;
-            parser_string_delete(&token_data->data);
-            return;
-        }
-        case CHARACTER:
-        case END_OF_FILE: {
-            return;
-        }
-        default: {
-            printf("Unknown token type");
-        }
-    }
-}
-
-token_result_t push_token(tokenizer_t* tokenizer, const token_t* token) {
-    if (queue_push(&tokenizer->internal_token_queue, token) != 0 )
+token_result_t push_token(const tokenizer_t* tokenizer, const token_t* token) {
+    if (queue_push(tokenizer->token_queue, token) != 0 )
         return TOKEN_ERROR;
     return TOKEN_OK;
 }
@@ -330,7 +176,7 @@ token_result_t handle_data_state(tokenizer_t* tokenizer) {
         }
         case EOF: {
             const token_t token = get_eof_token();
-            if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
+            if (queue_push(tokenizer->token_queue, &token) != 0 )
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -400,7 +246,7 @@ token_result_t handle_script_data_state(tokenizer_t* tokenizer) {
             return TOKEN_OK;
         case NULL_CHARACTER: {
             const token_t token = get_character_token(REPLACEMENT_CHARACTER);
-            if (queue_push(&tokenizer->internal_token_queue, &token) != 0 )
+            if (queue_push(tokenizer->token_queue, &token) != 0 )
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -624,7 +470,7 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer) {
             goto anything_else;
         }
         case SOLIDUS: {
-            // check if end tag tkoen is appropriate
+            // TODO check if end tag token is appropriate
             tokenizer->data_state = SELF_CLOSING_START_TAG_STATE;
             goto anything_else;
         }
@@ -753,7 +599,7 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
 int token_next(tokenizer_t* tokenizer) {
     typedef token_result_t (*handler_t)(tokenizer_t* tokenizer);
 
-    static handler_t handlers[] = {
+    static handler_t handlers[DATA_STATE_COUNT] = {
         [DATA_STATE] = handle_data_state,
         [RCDATA_STATE] = handle_rcdata_state,
         [RAWTEXT_STATE] = handle_rawtext_state,
@@ -790,6 +636,7 @@ int token_next(tokenizer_t* tokenizer) {
     };
     token_result_t result = TOKEN_OK;
     do {
+        assert(tokenizer->data_state < DATA_STATE_COUNT);
         const handler_t handler = handlers[tokenizer->data_state];
         if (!handler) {
             printf("Unknown or unhandled tokenizer state");

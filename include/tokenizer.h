@@ -6,9 +6,9 @@
 
 #include "misc.h"
 
-#define INTERNAL_QUEUE_SIZE  8
+#define TOKEN_QUEUE_SIZE  8
 
-typedef struct dom_tree_node dom_tree_node_t;
+typedef struct dom_tree_node dom_node_t;
 
 typedef enum {
     TOKEN_OK,
@@ -130,31 +130,6 @@ static const char* parse_error_to_string(parse_error_t error_code) {
     return parse_errors[error_code];
 }
 
-/// tokenizer state machine insertion states
-typedef enum {
-    INITIAL = 0,
-    BEFORE_HTML,
-    BEFORE_HEAD,
-    IN_HEAD,
-    IN_HEAD_NOSCRIPT,
-    AFTER_HEAD,
-    IN_BODY,
-    TEXT,
-    IN_TABLE,
-    IN_TABLE_TEXT,
-    IN_CAPTION,
-    IN_COLUMN_GROUP,
-    IN_TABLE_BODY,
-    IN_ROW,
-    IN_CELL,
-    IN_TEMPLATE,
-    AFTER_BODY,
-    IN_FRAMESET,
-    AFTER_FRAMESET,
-    AFTER_AFTER_BODY,
-    AFTER_AFTER_FRAMESET
-} insertion_state_t;
-
 /// tokenizer state machine data states
 typedef enum {
     DATA_STATE = 0,
@@ -236,6 +211,7 @@ typedef enum {
     HEXADECIMAL_CHARACTER_REFERENCE_STATE,
     DECIMAL_CHARACTER_REFERENCE_STATE,
     NUMERIC_CHARACTER_REFERENCE_END_STATE,
+    DATA_STATE_COUNT
 } data_state_t;
 
 /// Token types
@@ -249,12 +225,6 @@ typedef enum {
     END_OF_FILE
 } token_type_t;
 
-/// Attribute type
-typedef struct {
-    string_t    name;
-    string_t    value;
-} attribute_t;
-
 /// DOCTYPE token type
 typedef struct {
     string_t    name;
@@ -267,13 +237,12 @@ typedef struct {
 typedef struct {
     string_t    name;
     bool        self_closing_flag;
-    attribute_t*  attributes;
-    size_t      attr_count;
+    attribute_list_t attributes;
 } tag_token;
 
 /// Comment token type
 typedef struct {
-    string_t    data;
+    string_t    text;
 } comment_token;
 
 /// Character token type
@@ -296,15 +265,14 @@ typedef struct {
 } token_t;
 
 typedef struct {
-    token_t tokens[INTERNAL_QUEUE_SIZE];
+    token_t tokens[TOKEN_QUEUE_SIZE];
     size_t start;
     size_t end;
     size_t count;
-} internal_token_queue_t;
+} token_queue_t;
 
 typedef struct {
     /// Tokenizer state
-    insertion_state_t   insertion_state;
     data_state_t        data_state;
     data_state_t        return_state;
     bool                consume_flag;
@@ -317,20 +285,16 @@ typedef struct {
     parse_error_t       last_error;
 
     /// Helper and miscellaneous fields
-    internal_token_queue_t internal_token_queue;
+    token_queue_t* token_queue;
     FILE* stream;
     size_t chars_consumed;
 } tokenizer_t;
 
-typedef struct open_elem_stack {
-    struct open_elem_stack *next;
-} open_elem_stack_t;
-
-void queue_init(internal_token_queue_t* queue);
-int queue_pop(internal_token_queue_t* queue, const token_t* out);
-int queue_push(internal_token_queue_t* queue, const token_t* token);
-bool queue_is_empty(const internal_token_queue_t* queue);
-bool queue_is_full(const internal_token_queue_t* queue);
+void queue_init(token_queue_t* queue);
+int queue_pop(token_queue_t* queue, token_t* out);
+int queue_push(token_queue_t* queue, const token_t* token);
+bool queue_is_empty(const token_queue_t* queue);
+bool queue_is_full(const token_queue_t* queue);
 
 bool is_void_element(token_t token);
 bool is_template_element(token_t token);
@@ -347,13 +311,10 @@ int get_new_start_tag_token(token_t* out);
 int get_new_end_tag_token(token_t* out);
 int get_new_comment_token(token_t* out);
 
-/// ONLY called in the tree building stage!
-void destroy_token(token_t* token);
-
-token_result_t push_token(tokenizer_t* tokenizer, const token_t* token);
+token_result_t push_token(const tokenizer_t* tokenizer, const token_t* token);
 token_result_t pop_token(tokenizer_t* tokenizer, token_t* out);
 
-/// State handling functions
+/// State handlers
 token_result_t handle_data_state(tokenizer_t* tokenizer);
 token_result_t handle_rcdata_state(tokenizer_t* tokenizer);
 token_result_t handle_rawtext_state(tokenizer_t* tokenizer);
