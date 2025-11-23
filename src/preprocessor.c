@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "defines.h"
 
@@ -93,6 +92,7 @@ int normalize_newlines(const char* filepath, const char* temp_filepath) {
         }
     }
 
+    fclose(new_stream);
     fclose(stream);
     return 0;
 }
