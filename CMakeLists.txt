@@ -5,7 +5,7 @@ set(CMAKE_C_STANDARD 11)
 
 add_executable(html_parser
         src/main.c
-        src/tree.c
+        src/tree_builder.c
         src/tokenizer.c
         src/preprocessor.c
         src/driver.c
