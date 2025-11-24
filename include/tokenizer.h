@@ -7,6 +7,7 @@
 #include "misc.h"
 
 #define TOKEN_QUEUE_SIZE  8
+#define PEEK_BUFFER_LEN   16
 
 typedef struct dom_tree_node dom_node_t;
 
@@ -285,9 +286,11 @@ typedef struct {
     parse_error_t       last_error;
 
     /// Helper and miscellaneous fields
-    token_queue_t* token_queue;
-    FILE* stream;
-    size_t chars_consumed;
+    token_queue_t*      token_queue;
+    FILE*               stream;
+    size_t              chars_consumed;
+    int                 peek_buffer[PEEK_BUFFER_LEN];
+    size_t              peek_count;
 } tokenizer_t;
 
 void queue_init(token_queue_t* queue);
@@ -303,13 +306,17 @@ bool is_escapable_raw_text_element(token_t token);
 bool is_foreign_element(token_t token);
 bool is_normal_element(token_t token);
 
+bool is_peek_buf_empty(const tokenizer_t* tokenizer);
+bool try_match_peek_buf(tokenizer_t* tokenizer, const char* str);
+void consume_peek_buf(tokenizer_t* tokenizer);
 void consume_character(tokenizer_t* tokenizer);
 void reconsume_character(tokenizer_t* tokenizer);
 token_t get_character_token(int c);
 token_t get_eof_token();
-int get_new_start_tag_token(token_t* out);
-int get_new_end_tag_token(token_t* out);
-int get_new_comment_token(token_t* out);
+token_t get_new_start_tag_token();
+token_t get_new_end_tag_token();
+token_t get_new_comment_token();
+token_t get_new_doctype_token();
 
 token_result_t push_token(const tokenizer_t* tokenizer, const token_t* token);
 token_result_t pop_token(tokenizer_t* tokenizer, token_t* out);
@@ -329,6 +336,13 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer);
 
 token_result_t handle_before_attribute_name_state(tokenizer_t* tokenizer);
 token_result_t handle_attribute_name_state(tokenizer_t* tokenizer);
+
+token_result_t handle_markup_declaration_open_state(tokenizer_t* tokenizer);
+
+token_result_t handle_doctype_state(tokenizer_t* tokenizer);
+token_result_t handle_before_doctype_name_state(tokenizer_t* tokenizer);
+token_result_t handle_doctype_name_state(tokenizer_t* tokenizer);
+token_result_t handle_after_doctype_name_state(tokenizer_t* tokenizer);
 
 int token_next(tokenizer_t* tokenizer);
 
