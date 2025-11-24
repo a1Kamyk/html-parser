@@ -1,5 +1,6 @@
 #include "preprocessor.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -84,12 +85,11 @@ int normalize_newlines(const char* filepath, const char* temp_filepath) {
         c = fgetc(stream);
     }
 
-    if (remove_count != 0) {
-        const int res = remove_positions(remove_pos_buffer, remove_count, stream, new_stream, start_pos, curr_pos);
-        if (res != 0) {
-            fclose(stream);
-            return STDIO_ERROR;
-        }
+    const int res = remove_positions(remove_pos_buffer, remove_count, stream, new_stream, start_pos, curr_pos);
+    if (res != 0) {
+        fclose(stream);
+        fclose(new_stream);
+        return STDIO_ERROR;
     }
 
     fclose(new_stream);

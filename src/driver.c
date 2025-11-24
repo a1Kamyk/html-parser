@@ -94,6 +94,8 @@ int run_parser(const int argc, char **argv) {
 
     dom_node_t* dom_root = parse_document(&tokenizer, &tree_builder);
 
+    printf("%p", dom_root);
+
     return 0;
 }
 
@@ -113,6 +115,7 @@ void parser_init(tokenizer_t* tokenizer, tree_builder_t* tree_builder,
     tokenizer->token_queue = token_stream;
     tokenizer->stream = stream;
     tokenizer->chars_consumed = 0;
+    tokenizer->peek_count = 0;
 
     parser_string_init_sized(&tokenizer->temporary_buffer, TEMPORARY_BUFFER_SIZE);
 
