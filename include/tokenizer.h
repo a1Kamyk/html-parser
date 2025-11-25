@@ -73,64 +73,6 @@ typedef enum {
     PARSE_ERROR_COUNT
 } parse_error_t;
 
-static const char* parse_error_to_string(parse_error_t error_code) {
-    static const char* parse_errors[PARSE_ERROR_COUNT] = {
-        "no-error",
-        "abrupt-closing-of-empty-comment",
-        "abrupt-doctype-public-identifier",
-        "abrupt-doctype-system-identifier",
-        "absence-of-digits-in-numeric-character-reference",
-        "cdata-in-html-content",
-        "character-reference-outside-unicode-range",
-        "control-character-in-input-stream",
-        "control-character-reference",
-        "duplicate-attribute",
-        "end-tag-with-attributes",
-        "end-tag-with-trailing-solidus",
-        "eof-before-tag-name",
-        "eof-in-cdata",
-        "eof-in-comment",
-        "eof-in-doctype",
-        "eof-in-script-html-comment-like-text",
-        "eof-in-tag",
-        "incorrectly-closed-comment",
-        "incorrectly-opened-comment",
-        "invalid-character-sequence-after-doctype-name",
-        "invalid-first-character-of-tag-name",
-        "missing-attribute-value",
-        "missing-doctype-name",
-        "missing-doctype-public-identifier",
-        "missing-doctype-system-identifier",
-        "missing-end-tag-name",
-        "missing-quote-before-doctype-public-identifier",
-        "missing-quote-before-doctype-system-identifier",
-        "missing-semicolon-after-character-reference",
-        "missing-whitespace-after-doctype-public-keyword",
-        "missing-whitespace-after-doctype-system-keyword",
-        "missing-whitespace-before-doctype-name",
-        "missing-whitespace-between-attributes",
-        "missing-whitespace-between-doctype-public-and-system-identifiers",
-        "nested-comment",
-        "noncharacter-character-reference",
-        "noncharacter-in-input-stream",
-        "non-void-html-element-start-tag-with-trailing-solidus",
-        "null-character-reference",
-        "surrogate-character-reference",
-        "surrogate-in-input-stream",
-        "unexpected-character-after-doctype-system-identifier",
-        "unexpected-character-in-attribute-name",
-        "unexpected-character-in-unquoted-attribute-value",
-        "unexpected-equals-sign-before-attribute-name",
-        "unexpected-null-character",
-        "unexpected-question-mark-instead-of-tag-name",
-        "unexpected-solidus-in-tag",
-        "unknown-named-character-reference"
-    };
-    if (error_code >= PARSE_ERROR_COUNT)
-        return "unknown parse error";
-    return parse_errors[error_code];
-}
-
 /// tokenizer state machine data states
 typedef enum {
     DATA_STATE = 0,

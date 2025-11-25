@@ -5,6 +5,151 @@
 
 #include "misc.h"
 
+static const char* parse_error_to_string(parse_error_t error_code) {
+    static const char* parse_errors[PARSE_ERROR_COUNT] = {
+        "no-error",
+        "abrupt-closing-of-empty-comment",
+        "abrupt-doctype-public-identifier",
+        "abrupt-doctype-system-identifier",
+        "absence-of-digits-in-numeric-character-reference",
+        "cdata-in-html-content",
+        "character-reference-outside-unicode-range",
+        "control-character-in-input-stream",
+        "control-character-reference",
+        "duplicate-attribute",
+        "end-tag-with-attributes",
+        "end-tag-with-trailing-solidus",
+        "eof-before-tag-name",
+        "eof-in-cdata",
+        "eof-in-comment",
+        "eof-in-doctype",
+        "eof-in-script-html-comment-like-text",
+        "eof-in-tag",
+        "incorrectly-closed-comment",
+        "incorrectly-opened-comment",
+        "invalid-character-sequence-after-doctype-name",
+        "invalid-first-character-of-tag-name",
+        "missing-attribute-value",
+        "missing-doctype-name",
+        "missing-doctype-public-identifier",
+        "missing-doctype-system-identifier",
+        "missing-end-tag-name",
+        "missing-quote-before-doctype-public-identifier",
+        "missing-quote-before-doctype-system-identifier",
+        "missing-semicolon-after-character-reference",
+        "missing-whitespace-after-doctype-public-keyword",
+        "missing-whitespace-after-doctype-system-keyword",
+        "missing-whitespace-before-doctype-name",
+        "missing-whitespace-between-attributes",
+        "missing-whitespace-between-doctype-public-and-system-identifiers",
+        "nested-comment",
+        "noncharacter-character-reference",
+        "noncharacter-in-input-stream",
+        "non-void-html-element-start-tag-with-trailing-solidus",
+        "null-character-reference",
+        "surrogate-character-reference",
+        "surrogate-in-input-stream",
+        "unexpected-character-after-doctype-system-identifier",
+        "unexpected-character-in-attribute-name",
+        "unexpected-character-in-unquoted-attribute-value",
+        "unexpected-equals-sign-before-attribute-name",
+        "unexpected-null-character",
+        "unexpected-question-mark-instead-of-tag-name",
+        "unexpected-solidus-in-tag",
+        "unknown-named-character-reference"
+    };
+    if (error_code >= PARSE_ERROR_COUNT)
+        return "unknown parse error";
+    return parse_errors[error_code];
+}
+
+static const char* data_state_to_string(const data_state_t state) {
+    static const char* states[DATA_STATE_COUNT] = {
+        "data-state",
+        "rcdata-state",
+        "rawtext-state",
+        "script-data-state",
+        "plaintext-state",
+        "tag-open-state",
+        "end-tag-open-state",
+        "tag-name-state",
+        "rcdata-less-than-sign-state",
+        "rcdata-end-tag-open-state",
+        "rcdata-end-tag-name-state",
+        "rawtext-less-than-sign-state",
+        "rawtext-end-tag-open-state",
+        "rawtext-end-tag-name-state",
+        "script-data-less-than-sign-state",
+        "script-data-end-tag-open-state",
+        "script-data-end-tag-name-state",
+        "script-data-escape-start-state",
+        "script-data-escape-start-dash-state",
+        "script-data-escaped-state",
+        "script-data-escaped-dash-state",
+        "script-data-escaped-less-than-sign-state",
+        "script-data-escaped-end-tag-open-state",
+        "script-data-escaped-end-tag-name-state",
+        "script-data-double-escape-start-state",
+        "script-data-double-escaped-state",
+        "script-data-double-escaped-dash-state",
+        "script-data-double-escaped-dash-dash-state",
+        "script-data-double-escaped-less-than-sign-state",
+        "script-data-double-escape-end-state",
+        "before-attribute-name-state",
+        "attribute-name-state",
+        "after-attribute-name-state",
+        "before-attribute-value-state",
+        "attribute-value-double-quoted-state",
+        "attribute-value-single-quote-state",
+        "attribute-value-unquote-state",
+        "after-attribute-value-quoted-state",
+        "self-closing-start-tag-state",
+        "bogus-comment-state",
+        "markup-declaration-open-state",
+        "comment-start-state",
+        "comment-start-dash-state",
+        "comment-state",
+        "comment-less-than-sign-state",
+        "comment-less-than-sign-bang-state",
+        "comment-less-than-sign-bang-dash-state",
+        "comment-less-than-sign-bang-dash-dash-state",
+        "comment-end-dash-state",
+        "comment-end-state",
+        "comment-end-bang-state",
+        "doctype-state",
+        "before-doctype-name-state",
+        "doctype-name-state",
+        "after-doctype-name-state",
+        "after-doctype-public-keyword-state",
+        "before-doctype-public-identifier-state",
+        "doctype-public-identifier-double-quoted-state",
+        "doctype-public-identifier-single-quoted-state",
+        "after-doctype-public-identifier-state",
+        "between-doctype-public-and-system-identifiers-state",
+        "after-doctype-system-keyword-state",
+        "before-doctype-system-identifier-state",
+        "doctype-system-identifier-double-quoted-state",
+        "doctype-system-identifier-single-quoted-state",
+        "after-doctype-system-identifier-state",
+        "bogus-doctype-state",
+        "cdata-section-state",
+        "cdata-section-bracket-state",
+        "cdata-section-end-state",
+        "character-reference-state",
+        "named-character-reference-state",
+        "ambiguous-ampersand-state",
+        "numeric-character-reference-state",
+        "hexadecimal-character-reference-start-state",
+        "decimal-character-reference-start-state",
+        "hexadecimal-character-reference-state",
+        "decimal-character-reference-state",
+        "numeric-character-reference-end-state"
+    };
+    if (state >= DATA_STATE_COUNT)
+        return "unknown data state";
+    return states[state];
+}
+
 void queue_init(token_queue_t* queue) {
     queue->start = 0;
     queue->end = 0;
@@ -911,7 +1056,8 @@ int token_next(tokenizer_t* tokenizer) {
         assert(tokenizer->data_state < DATA_STATE_COUNT);
         const handler_t handler = handlers[tokenizer->data_state];
         if (!handler) {
-            printf("Unknown or unhandled tokenizer state");
+            printf("Unknown or unhandled tokenizer state: %s",
+                data_state_to_string(tokenizer->data_state));
             result = TOKEN_ERROR;
             break;
         }

@@ -112,6 +112,49 @@ static const char* formatting_tags[] = {
     "u"
 };
 
+static const char* node_type_to_string(const dom_node_type_t type) {
+    static const char* types[DOM_TYPES_COUNT] = {
+        "dom-none",
+        "dom-root",
+        "dom-element",
+        "dom-text",
+        "dom-comment",
+        "dom-doctype"
+    };
+    if (type >= DOM_TYPES_COUNT)
+        return "Unknown node type";
+    return types[type];
+}
+
+static const char* insertion_state_to_string(const insertion_state_t state) {
+    static const char* states[INSERTION_STATE_COUNT] = {
+        "initial",
+        "before-html",
+        "before-head",
+        "in-head",
+        "in-head-noscript",
+        "after-head",
+        "in-body",
+        "text",
+        "in-table",
+        "in-table-text",
+        "in-caption",
+        "in-column-group",
+        "in-table-body",
+        "in-row",
+        "in-cell",
+        "in-template",
+        "after-body",
+        "in-frameset",
+        "after-frameset",
+        "after-after-body",
+        "after-after-frameset",
+    };
+    if (state >= INSERTION_STATE_COUNT)
+        return "Unknown insertion state";
+    return states[state];
+}
+
 int init_children_array(dom_node_t* node) {
     node->children = calloc(INITIAL_CHILD_CAPACITY, sizeof(dom_node_t*));
     if (!node->children) {
@@ -263,7 +306,7 @@ void delete_token(token_t* token) {
             return;
         }
         default: {
-            printf("Unknown token type");
+            printf("Unknown token type: %d\n", token->type);
         }
     }
 }
@@ -497,7 +540,8 @@ int tree_node_next(tree_builder_t* builder) {
         assert(builder->insertion_state < INSERTION_STATE_COUNT);
         const handler_t handler = handlers[builder->insertion_state];
         if (!handler) {
-            printf("Unknown or unhandled tokenizer state");
+            printf("Unknown or unhandled tree builder state: %s\n",
+                insertion_state_to_string(builder->insertion_state));
             result = NODE_ERROR;
             break;
         }
