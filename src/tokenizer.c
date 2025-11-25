@@ -296,7 +296,7 @@ token_t get_character_token(const int c) {
 
 token_t get_eof_token() {
     return (token_t){
-        .type = EOF
+        .type = END_OF_FILE
     };
 }
 
