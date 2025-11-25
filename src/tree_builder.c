@@ -188,6 +188,12 @@ int stack_push(open_elem_stack_t* stack, dom_node_t* node) {
     return 0;
 }
 
+dom_node_t* stack_top(const open_elem_stack_t* stack) {
+    if (stack_is_empty(stack))
+        return NULL;
+    return stack->elements[stack->stack_top];
+}
+
 bool stack_is_empty(const open_elem_stack_t* stack) {
     return stack->stack_top == 0;
 }
@@ -257,25 +263,52 @@ dom_node_t* add_child_move(dom_node_t* parent, dom_node_t* ref) {
 }
 
 void delete_tree_node(dom_node_t* node) {
-    // TODO restructure to dispatch data deletion to a helper function to remove switch statement
-    if (!node) return;
+    if (!node)
+        return;
+    for (size_t i = 0; i < node->children_amount; i++) {
+        delete_tree_node(node->children[i]);
+    }
+    free(node->children);
+
     switch (node->type) {
-        case DOM_ROOT: {
-            for (size_t i = 0; i < node->children_amount; i++) {
-                delete_tree_node(node->children[i]);
-            }
-            free(node->children);
-            break;
-        }
         case DOM_ELEMENT:
-        case DOM_TEXT:
+            delete_element_node_data(&node->data.element);
+            break;
         case DOM_COMMENT:
+            delete_comment_node_data(&node->data.comment);
+            break;
         case DOM_DOCTYPE:
+            delete_doctype_node_data(&node->data.doctype);
+            break;
+        case DOM_ROOT:
+        case DOM_TEXT:
+            break;
         default: {
-            printf("Unknown node type %d\n", node->type);
+            printf("Unknown node type %s\n", node_type_to_string(node->type));
             break;
         }
     }
+}
+
+void delete_doctype_node_data(doctype_node_t* node) {
+    if (!node)
+        return;
+    parser_string_delete(&node->name);
+    parser_string_delete(&node->public_id);
+    parser_string_delete(&node->system_id);
+}
+
+void delete_element_node_data(element_node_t* node) {
+    if (!node)
+        return;
+    parser_string_delete(&node->tag_name);
+    attribute_list_delete(&node->attributes);
+}
+
+void delete_comment_node_data(comment_node_t* node) {
+    if (!node)
+        return;
+    parser_string_delete(&node->text);
 }
 
 void delete_token(token_t* token) {
@@ -371,6 +404,35 @@ int get_element_for_token(dom_node_t* out, token_t* token) {
     return 0;
 }
 
+dom_node_t* insert_element_for_token(tree_builder_t* builder,
+                             token_t* token,
+                             bool only_add_to_element_stack,
+                             dom_node_t* insert_location) {
+    if (!builder || !token)
+        return NULL;
+    if (!insert_location)
+        insert_location = current_insertion_point(builder);
+    dom_node_t element;
+    get_element_for_token(&element, token);
+    dom_node_t* node = add_child_move(insert_location, &element);
+    if (!node)
+        goto fail;
+    if (stack_push(&builder->open_elem_stack, &element) != 0)
+        goto fail;
+    return node;
+
+    fail:
+    delete_tree_node(&element);
+    return NULL;
+}
+
+dom_node_t* current_insertion_point(const tree_builder_t* builder) {
+    dom_node_t* insert = stack_top(&builder->open_elem_stack);
+    if (!insert)
+        return builder->root_node;
+    return insert;
+}
+
 static void handle_consume_flag(tree_builder_t* builder) {
     if (builder->consume_flag)
         consume_token(builder);
@@ -380,7 +442,6 @@ static void handle_consume_flag(tree_builder_t* builder) {
 
 node_result_t handle_initial_state(tree_builder_t* builder) {
     handle_consume_flag(builder);
-
     token_t* current_token = &builder->current_token;
     switch (current_token->type) {
         case COMMENT: {
@@ -431,7 +492,6 @@ node_result_t handle_initial_state(tree_builder_t* builder) {
 
 node_result_t handle_before_html_state(tree_builder_t* builder) {
     handle_consume_flag(builder);
-
     token_t* current_token = &builder->current_token;
     switch (current_token->type) {
         case DOCTYPE: {
@@ -448,10 +508,8 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
             return NODE_OK;
         }
         case CHARACTER: {
-            if (current_token->type == CHARACTER &&
-                is_html_whitespace(current_token->data.character.character)) {
+            if (is_html_whitespace(current_token->data.character.character))
                     return NODE_OK;
-                }
             // anything else case
             break;
         }
@@ -480,6 +538,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
                 // anything else case
                 break;
             }
+            // parse error
             return NODE_ERROR;
         }
         default: {
@@ -488,6 +547,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
         }
     }
 
+    // anything else
     get_new_element_node(&builder->pending_node);
     element_node_t* node_data = &builder->pending_node.data.element;
     if (parser_string_init_cstr(&node_data->tag_name, "html") != 0)
@@ -509,12 +569,89 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
     }
 }
 
+node_result_t handle_before_head_state(tree_builder_t* builder) {
+    handle_consume_flag(builder);
+    token_t* current_token = &builder->current_token;
+    switch (current_token->type) {
+        case CHARACTER: {
+            if (is_html_whitespace(current_token->data.character.character))
+                return NODE_OK;
+            break;
+        }
+        case COMMENT: {
+            get_new_comment_node(&builder->pending_node);
+            parser_move_string(&builder->pending_node.data.comment.text,
+                &current_token->data.comment.text);
+            dom_node_t* insertion_point = current_insertion_point(builder);
+            dom_node_t* node = add_child_move(current_insertion_point(builder), &builder->pending_node);
+            if (!node)
+                goto fail;
+            return NODE_OK;
+        }
+        case DOCTYPE: {
+            // parse error
+            return NODE_ERROR;
+        }
+        case START_TAG: {
+            if (parser_cstrcmp("html", &current_token->data.tag.name) == 0) {
+                builder->temporary_state = IN_BODY;
+                builder->temporary_state_flag = true;
+                builder->consume_flag = false;
+                return NODE_REPROCESS;
+            }
+            if (parser_cstrcmp("head", &current_token->data.tag.name) == 0) {
+                dom_node_t* insert = current_insertion_point(builder);
+                dom_node_t* node = insert_element_for_token(builder, current_token,
+                false, insert);
+                if (!node)
+                    return NODE_ERROR;
+                builder->head_element = node;
+                builder->insertion_state = IN_HEAD;
+                return NODE_OK;
+            }
+        }
+        case END_TAG: {
+            if (parser_cstrcmp("head", &current_token->data.tag.name) == 0 ||
+                parser_cstrcmp("body", &current_token->data.tag.name) == 0 ||
+                parser_cstrcmp("html", &current_token->data.tag.name) == 0 ||
+                parser_cstrcmp("br", &current_token->data.tag.name) == 0) {
+                // anything else case
+                break;
+            }
+            // parse error
+            return NODE_ERROR;
+        }
+        default: {
+            // anything else case
+            break;
+        }
+    }
+
+    // anything else
+    token_t head_token = get_new_start_tag_token();
+    dom_node_t* insert = current_insertion_point(builder);
+    if (parser_string_init_cstr(&head_token.data.tag.name, "head") != 0)
+        return NODE_ERROR;
+    dom_node_t* node = insert_element_for_token(builder, &head_token,
+        false, insert);
+    if (!node)
+        return NODE_ERROR;
+    builder->head_element = node;
+    builder->insertion_state = IN_HEAD;
+    builder->consume_flag = false;
+    return NODE_REPROCESS;
+
+    fail:
+    delete_tree_node(&builder->pending_node);
+    return NODE_ERROR;
+}
+
 int tree_node_next(tree_builder_t* builder) {
     typedef node_result_t (*handler_t)(tree_builder_t* builder);
     const static handler_t handlers[] = {
         [INITIAL] = handle_initial_state,
         [BEFORE_HTML] = handle_before_html_state,
-        [BEFORE_HEAD] = NULL,
+        [BEFORE_HEAD] = handle_before_head_state,
         [IN_HEAD] = NULL,
         [IN_HEAD_NOSCRIPT] = NULL,
         [AFTER_HEAD] = NULL,
@@ -538,7 +675,13 @@ int tree_node_next(tree_builder_t* builder) {
     node_result_t result = NODE_OK;
     do {
         assert(builder->insertion_state < INSERTION_STATE_COUNT);
-        const handler_t handler = handlers[builder->insertion_state];
+        handler_t handler = NULL;
+        if (builder->temporary_state_flag) {
+            handler = handlers[builder->temporary_state];
+            builder->temporary_state_flag = false;
+        }
+        else
+            handler = handlers[builder->insertion_state];
         if (!handler) {
             printf("Unknown or unhandled tree builder state: %s\n",
                 insertion_state_to_string(builder->insertion_state));

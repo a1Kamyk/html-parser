@@ -13,7 +13,6 @@
 dom_node_t* parse_document(tokenizer_t* tokenizer, tree_builder_t* builder) {
     dom_node_t* root = create_root_node();
     builder->root_node = root;
-    builder->current_node = root;
 
     while (true) {
         while (queue_is_empty(tokenizer->token_queue)) {
@@ -121,6 +120,8 @@ void parser_init(tokenizer_t* tokenizer, tree_builder_t* tree_builder,
 
     // Tree builder initialization
     tree_builder->insertion_state = INITIAL;
+    tree_builder->temporary_state = INITIAL;
+    tree_builder->temporary_state_flag = false;
     tree_builder->consume_flag = true;
     tree_builder->current_token = (token_t){ .type = NONE };
     tree_builder->parser_cannot_change_mode = false;
@@ -131,7 +132,7 @@ void parser_init(tokenizer_t* tokenizer, tree_builder_t* tree_builder,
     tree_builder->open_elem_stack = (open_elem_stack_t){0};
     tree_builder->token_stream = token_stream;
     tree_builder->root_node = NULL;
-    tree_builder->current_node = NULL;
+    tree_builder->head_element = NULL;
 
     stack_init(&tree_builder->open_elem_stack);
 }
