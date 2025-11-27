@@ -169,7 +169,7 @@ int init_children_array(dom_node_t* node) {
 }
 
 void stack_init(open_elem_stack_t* stack) {
-    stack->stack_top = 0;
+    *stack = (open_elem_stack_t){0};
 }
 
 int stack_pop(open_elem_stack_t* stack, dom_node_t** out) {
@@ -417,7 +417,7 @@ dom_node_t* insert_element_for_token(tree_builder_t* builder,
     dom_node_t* node = add_child_move(insert_location, &element);
     if (!node)
         goto fail;
-    if (stack_push(&builder->open_elem_stack, &element) != 0)
+    if (stack_push(builder->open_elem_stack, &element) != 0)
         goto fail;
     return node;
 
@@ -427,7 +427,7 @@ dom_node_t* insert_element_for_token(tree_builder_t* builder,
 }
 
 dom_node_t* current_insertion_point(const tree_builder_t* builder) {
-    dom_node_t* insert = stack_top(&builder->open_elem_stack);
+    dom_node_t* insert = stack_top(builder->open_elem_stack);
     if (!insert)
         return builder->root_node;
     return insert;
@@ -521,7 +521,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
                 dom_node_t* node = add_child_move(builder->root_node, &builder->pending_node);
                 if (!node)
                     goto fail;
-                if (stack_push(&builder->open_elem_stack, node) != 0)
+                if (stack_push(builder->open_elem_stack, node) != 0)
                     goto fail;
                 builder->insertion_state = BEFORE_HEAD;
                 return NODE_OK;
@@ -557,7 +557,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
     dom_node_t* node = add_child_move(builder->root_node, &builder->pending_node);
     if (!node)
         goto fail;
-    if (stack_push(&builder->open_elem_stack, node) != 0)
+    if (stack_push(builder->open_elem_stack, node) != 0)
         goto fail;
 
     builder->insertion_state = BEFORE_HEAD;
@@ -582,7 +582,6 @@ node_result_t handle_before_head_state(tree_builder_t* builder) {
             get_new_comment_node(&builder->pending_node);
             parser_move_string(&builder->pending_node.data.comment.text,
                 &current_token->data.comment.text);
-            dom_node_t* insertion_point = current_insertion_point(builder);
             dom_node_t* node = add_child_move(current_insertion_point(builder), &builder->pending_node);
             if (!node)
                 goto fail;

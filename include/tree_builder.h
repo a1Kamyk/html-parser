@@ -102,7 +102,7 @@ typedef struct {
     bool                has_pending_node;
 
     /// Helper and miscellaneous fields
-    open_elem_stack_t   open_elem_stack;
+    open_elem_stack_t*  open_elem_stack;
     token_queue_t*      token_stream;
     dom_node_t*         root_node;
     dom_node_t*         head_element;

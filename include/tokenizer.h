@@ -10,6 +10,7 @@
 #define PEEK_BUFFER_LEN   16
 
 typedef struct dom_tree_node dom_node_t;
+struct parser;
 
 typedef enum {
     TOKEN_OK,
@@ -110,7 +111,7 @@ typedef enum {
     AFTER_ATTRIBUTE_NAME_STATE,
     BEFORE_ATTRIBUTE_VALUE_STATE,
     ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE,
-    ATTRIBUTE_VALUE_SINGLE_QUOTE_STATE,
+    ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE,
     ATTRIBUTE_VALUE_UNQUOTE_STATE,
     AFTER_ATTRIBUTE_VALUE_QUOTED_STATE,
     SELF_CLOSING_START_TAG_STATE,
@@ -233,6 +234,7 @@ typedef struct {
     size_t              chars_consumed;
     int                 peek_buffer[PEEK_BUFFER_LEN];
     size_t              peek_count;
+    struct parser*      parser;
 } tokenizer_t;
 
 void queue_init(token_queue_t* queue);
@@ -260,7 +262,7 @@ token_t get_new_end_tag_token();
 token_t get_new_comment_token();
 token_t get_new_doctype_token();
 
-token_result_t push_token(const tokenizer_t* tokenizer, const token_t* token);
+token_result_t emit_token(const tokenizer_t* tokenizer, const token_t* token);
 token_result_t pop_token(tokenizer_t* tokenizer, token_t* out);
 
 /// State handlers
@@ -278,6 +280,12 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer);
 
 token_result_t handle_before_attribute_name_state(tokenizer_t* tokenizer);
 token_result_t handle_attribute_name_state(tokenizer_t* tokenizer);
+// after attribute name state
+token_result_t handle_before_attribute_value_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_value_double_quoted_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_value_single_quote_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_value_unquote_state(tokenizer_t* tokenizer);
+token_result_t handle_after_attribute_value_quoted_state(tokenizer_t* tokenizer);
 
 token_result_t handle_markup_declaration_open_state(tokenizer_t* tokenizer);
 

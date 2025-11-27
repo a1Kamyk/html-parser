@@ -343,10 +343,16 @@ token_t get_new_doctype_token() {
     };
 }
 
-token_result_t push_token(const tokenizer_t* tokenizer, const token_t* token) {
+token_result_t emit_token(const tokenizer_t* tokenizer, const token_t* token) {
     if (queue_push(tokenizer->token_queue, token) != 0 )
         return TOKEN_ERROR;
     return TOKEN_OK;
+}
+
+token_result_t emit_pending_token(tokenizer_t* tokenizer) {
+    assert(tokenizer->has_pending_token);
+    tokenizer->has_pending_token = false;
+    return emit_token(tokenizer, &tokenizer->pending_token);
 }
 
 static void handle_consume_flag(tokenizer_t* tokenizer) {
@@ -370,7 +376,7 @@ token_result_t handle_data_state(tokenizer_t* tokenizer) {
         case NULL_CHARACTER: {
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
             const token_t token = get_character_token(0);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         case EOF: {
             const token_t token = get_eof_token();
@@ -380,7 +386,7 @@ token_result_t handle_data_state(tokenizer_t* tokenizer) {
         }
         default: {
             const token_t token =  get_character_token(c);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
     }
 }
@@ -399,15 +405,15 @@ token_result_t handle_rcdata_state(tokenizer_t* tokenizer) {
         case NULL_CHARACTER: {
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
             const token_t token =  get_character_token(REPLACEMENT_CHARACTER);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         case EOF: {
             const token_t token = get_eof_token();
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         default: {
             const token_t token = get_character_token(c);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
     }
 }
@@ -422,15 +428,15 @@ token_result_t handle_rawtext_state(tokenizer_t* tokenizer) {
         case NULL_CHARACTER: {
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
             const token_t token = get_character_token(REPLACEMENT_CHARACTER);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         case EOF: {
             const token_t token = get_eof_token();
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         default: {
             const token_t token = get_character_token(c);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
     }
 }
@@ -450,11 +456,11 @@ token_result_t handle_script_data_state(tokenizer_t* tokenizer) {
         }
         case EOF: {
             const token_t token = get_eof_token();
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         default: {
             const token_t token = get_character_token(c);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
     }
 }
@@ -465,15 +471,15 @@ token_result_t handle_plaintext_state(tokenizer_t* tokenizer) {
     switch (c) {
         case NULL_CHARACTER: {
             const token_t token = get_character_token(REPLACEMENT_CHARACTER);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         case EOF: {
             const token_t token = get_eof_token();
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         default: {
             const token_t token = get_character_token(c);
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
     }
 }
@@ -501,8 +507,8 @@ token_result_t handle_tag_open_state(tokenizer_t* tokenizer) {
             tokenizer->last_error = EOF_BEFORE_TAG_NAME;
             const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
             const token_t eof_token = get_eof_token();
-            if (push_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
-                push_token(tokenizer, &eof_token) != TOKEN_OK)
+            if (emit_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
+                emit_token(tokenizer, &eof_token) != TOKEN_OK)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -516,7 +522,7 @@ token_result_t handle_tag_open_state(tokenizer_t* tokenizer) {
             }
             tokenizer->last_error = INVALID_FIRST_CHARACTER_OF_TAG_NAME;
             const token_t token = get_character_token(LESS_THAN_SIGN);
-            if (push_token(tokenizer, &token) == TOKEN_ERROR)
+            if (emit_token(tokenizer, &token) == TOKEN_ERROR)
                 return TOKEN_ERROR;
             tokenizer->data_state = DATA_STATE;
             tokenizer->consume_flag = false;
@@ -539,9 +545,9 @@ token_result_t handle_end_tag_open_state(tokenizer_t* tokenizer) {
             const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
             const token_t solidus_token = get_character_token(SOLIDUS);
             const token_t eof_token = get_eof_token();
-            if (push_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
-                push_token(tokenizer, &solidus_token) != TOKEN_OK ||
-                push_token(tokenizer, &eof_token) != TOKEN_OK)
+            if (emit_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
+                emit_token(tokenizer, &solidus_token) != TOKEN_OK ||
+                emit_token(tokenizer, &eof_token) != TOKEN_OK)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -564,7 +570,7 @@ token_result_t handle_end_tag_open_state(tokenizer_t* tokenizer) {
 }
 
 token_result_t handle_tag_name_state(tokenizer_t* tokenizer) {
-    assert( tokenizer->has_pending_token == true &&
+    assert(tokenizer->has_pending_token == true &&
             (tokenizer->pending_token.type == START_TAG ||
             tokenizer->pending_token.type == END_TAG));
 
@@ -584,10 +590,7 @@ token_result_t handle_tag_name_state(tokenizer_t* tokenizer) {
         }
         case '>': {
             tokenizer->data_state = DATA_STATE;
-            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK)
-                return TOKEN_ERROR;
-            tokenizer->has_pending_token = false;
-            return TOKEN_OK;
+            return emit_pending_token(tokenizer);
         }
         case NULL_CHARACTER: {
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
@@ -597,7 +600,7 @@ token_result_t handle_tag_name_state(tokenizer_t* tokenizer) {
         }
         case EOF: {
             const token_t token = get_eof_token();
-            return push_token(tokenizer, &token);
+            return emit_token(tokenizer, &token);
         }
         default: {
             if (parser_string_append_char(&tokenizer->pending_token.data.tag.name, c | 0x0020) != 0)
@@ -617,7 +620,7 @@ token_result_t handle_rcdata_less_than_sign_state(tokenizer_t* tokenizer) {
     }
     /// Default case
     const token_t token = get_character_token(LESS_THAN_SIGN);
-    if (push_token(tokenizer, &token) != TOKEN_OK)
+    if (emit_token(tokenizer, &token) != TOKEN_OK)
         return TOKEN_ERROR;
     tokenizer->data_state = RCDATA_STATE;
     tokenizer->consume_flag = false;
@@ -635,7 +638,7 @@ token_result_t handle_rcdata_end_tag_open_state(tokenizer_t* tokenizer) {
         return TOKEN_RECONSUME;
     }
     const token_t token = get_character_token(LESS_THAN_SIGN);
-    if (push_token(tokenizer, &token) != TOKEN_OK)
+    if (emit_token(tokenizer, &token) != TOKEN_OK)
         return TOKEN_ERROR;
     tokenizer->data_state = RCDATA_STATE;
     tokenizer->consume_flag = false;
@@ -663,10 +666,7 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer) {
         case '>': {
             // check if end tag token is appropriate
             tokenizer->data_state = DATA_STATE;
-            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK)
-                return TOKEN_ERROR;
-            tokenizer->has_pending_token = false;
-            return TOKEN_OK;
+            return emit_pending_token(tokenizer);
             goto anything_else;
         }
         default: {
@@ -679,13 +679,13 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer) {
             anything_else: {
                 const token_t less_than_sign_token = get_character_token(LESS_THAN_SIGN);
                 const token_t solidus_token = get_character_token(SOLIDUS);
-                if (push_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
-                    push_token(tokenizer, &solidus_token) != TOKEN_OK)
+                if (emit_token(tokenizer, &less_than_sign_token) != TOKEN_OK ||
+                    emit_token(tokenizer, &solidus_token) != TOKEN_OK)
                     return TOKEN_ERROR;
                 /// Emit a character token for each character in temporary buffer
                 for (size_t i = 0; i < tokenizer->temporary_buffer.length; i++) {
                     const token_t token = get_character_token(tokenizer->temporary_buffer.data[i]);
-                    if (push_token(tokenizer, &token) != TOKEN_OK)
+                    if (emit_token(tokenizer, &token) != TOKEN_OK)
                         return TOKEN_ERROR;
                 }
                 tokenizer->data_state = RCDATA_STATE;
@@ -782,6 +782,40 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
     }
 }
 
+token_result_t handle_before_attribute_value_state(tokenizer_t* tokenizer) {
+    handle_consume_flag(tokenizer);
+    const int c = tokenizer->current_char;
+    switch (c) {
+        case CHARACTER_TABULATION:
+        case LINE_FEED:
+        case FORM_FEED:
+        case SPACE: {
+            return TOKEN_OK;
+        }
+        case QUOTATION_MARK: {
+            tokenizer->data_state = ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE;
+            return TOKEN_OK;
+        }
+        case APOSTROPHE: {
+            tokenizer->data_state = ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE;
+            return TOKEN_OK;
+        }
+        case GREATER_THAN_SIGN: {
+            assert(tokenizer->has_pending_token &&
+                (tokenizer->pending_token.type == START_TAG ||
+                 tokenizer->pending_token.type == END_TAG));
+            tokenizer->last_error = MISSING_ATTRIBUTE_VALUE;
+            tokenizer->data_state = DATA_STATE;
+            return emit_pending_token(tokenizer);
+        }
+        default: {
+            tokenizer->data_state = ATTRIBUTE_VALUE_UNQUOTE_STATE;
+            tokenizer->consume_flag = false;
+            return TOKEN_RECONSUME;
+        }
+    }
+}
+
 token_result_t handle_markup_declaration_open_state(tokenizer_t* tokenizer) {
     if (!tokenizer->consume_flag)
         tokenizer->peek_buffer[tokenizer->peek_count++] = tokenizer->current_char;
@@ -838,8 +872,8 @@ token_result_t handle_doctype_state(tokenizer_t* tokenizer) {
             token_t doctype_token = get_new_doctype_token();
             doctype_token.data.doctype.force_quirks = true;
             const token_t eof_token = get_eof_token();
-            if (push_token(tokenizer, &doctype_token) != TOKEN_OK ||
-                push_token(tokenizer, &eof_token) != TOKEN_OK)
+            if (emit_token(tokenizer, &doctype_token) != TOKEN_OK ||
+                emit_token(tokenizer, &eof_token) != TOKEN_OK)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -875,7 +909,7 @@ token_result_t handle_before_doctype_name_state(tokenizer_t* tokenizer) {
             tokenizer->last_error = MISSING_DOCTYPE_NAME;
             token_t doctype_token = get_new_doctype_token();
             doctype_token.data.doctype.force_quirks = true;
-            if (push_token(tokenizer, &doctype_token) != TOKEN_OK)
+            if (emit_token(tokenizer, &doctype_token) != TOKEN_OK)
                 return TOKEN_ERROR;
             tokenizer->data_state = DATA_STATE;
             return TOKEN_OK;
@@ -907,10 +941,7 @@ token_result_t handle_doctype_name_state(tokenizer_t* tokenizer) {
         case GREATER_THAN_SIGN: {
             assert(tokenizer->has_pending_token);
             tokenizer->data_state = DATA_STATE;
-            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK)
-                return TOKEN_ERROR;
-            tokenizer->has_pending_token = false;
-            return TOKEN_OK;
+            return emit_pending_token(tokenizer);
         }
         case NULL_CHARACTER: {
             assert(tokenizer->has_pending_token && tokenizer->pending_token.type == DOCTYPE);
@@ -924,10 +955,9 @@ token_result_t handle_doctype_name_state(tokenizer_t* tokenizer) {
             tokenizer->last_error = EOF_IN_DOCTYPE;
             tokenizer->pending_token.data.doctype.force_quirks = true;
             const token_t eof_token = get_eof_token();
-            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK ||
-                push_token(tokenizer, &eof_token) != TOKEN_OK)
+            if (emit_pending_token(tokenizer) != TOKEN_OK ||
+                emit_token(tokenizer, &eof_token) != TOKEN_OK)
                 return TOKEN_ERROR;
-            tokenizer->has_pending_token = false;
             return TOKEN_OK;
         }
         default: {
@@ -952,20 +982,16 @@ token_result_t handle_after_doctype_name_state(tokenizer_t* tokenizer) {
         case GREATER_THAN_SIGN: {
             assert(tokenizer->has_pending_token && tokenizer->pending_token.type == DOCTYPE);
             tokenizer->data_state = DATA_STATE;
-            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK)
-                return TOKEN_ERROR;
-            tokenizer->has_pending_token = false;
-            return TOKEN_OK;
+            return emit_pending_token(tokenizer);
         }
         case EOF: {
             assert(tokenizer->has_pending_token && tokenizer->pending_token.type == DOCTYPE);
             tokenizer->last_error = EOF_IN_DOCTYPE;
             tokenizer->pending_token.data.doctype.force_quirks = true;
             const token_t eof_token = get_eof_token();
-            if (push_token(tokenizer, &tokenizer->pending_token) != TOKEN_OK ||
-                push_token(tokenizer, &eof_token) != TOKEN_OK)
+            if (emit_pending_token(tokenizer) != TOKEN_OK ||
+                emit_token(tokenizer, &eof_token) != TOKEN_OK)
                 return TOKEN_ERROR;
-            tokenizer->has_pending_token = false;
             return TOKEN_OK;
         }
         default: {
@@ -1026,11 +1052,12 @@ int token_next(tokenizer_t* tokenizer) {
         [SCRIPT_DATA_DOUBLE_ESCAPED_DASH_DASH_STATE] = NULL,
         [SCRIPT_DATA_DOUBLE_ESCAPED_LESS_THAN_SIGN_STATE] = NULL,
         [SCRIPT_DATA_DOUBLE_ESCAPE_END_STATE] = NULL,
-        [BEFORE_ATTRIBUTE_VALUE_STATE] = handle_before_attribute_name_state,
+        [BEFORE_ATTRIBUTE_NAME_STATE] = handle_before_attribute_name_state,
         [ATTRIBUTE_NAME_STATE] = handle_attribute_name_state,
         [AFTER_ATTRIBUTE_NAME_STATE] = NULL,
+        [BEFORE_ATTRIBUTE_VALUE_STATE] = handle_before_attribute_value_state,
         [ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE] = NULL,
-        [ATTRIBUTE_VALUE_SINGLE_QUOTE_STATE] = NULL,
+        [ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE] = NULL,
         [ATTRIBUTE_VALUE_UNQUOTE_STATE] = NULL,
         [AFTER_ATTRIBUTE_VALUE_QUOTED_STATE] = NULL,
         [SELF_CLOSING_START_TAG_STATE] = NULL,
@@ -1056,7 +1083,7 @@ int token_next(tokenizer_t* tokenizer) {
         assert(tokenizer->data_state < DATA_STATE_COUNT);
         const handler_t handler = handlers[tokenizer->data_state];
         if (!handler) {
-            printf("Unknown or unhandled tokenizer state: %s",
+            printf("Unknown or unhandled tokenizer state: %s\n",
                 data_state_to_string(tokenizer->data_state));
             result = TOKEN_ERROR;
             break;
