@@ -184,63 +184,6 @@ bool queue_is_full(const token_queue_t* queue) {
     return queue->count == TOKEN_QUEUE_SIZE;
 }
 
-bool is_void_element(const token_t token) {
-    static const char* void_tags[] = {
-        "area",
-        "base",
-        "br",
-        "col",
-        "embed",
-        "hr",
-        "img",
-        "input",
-        "link",
-        "meta",
-        "source",
-        "track",
-        "wbr"
-    };
-    static const size_t arr_size = sizeof(void_tags) / sizeof(void_tags[0]);
-
-    return contains(void_tags, arr_size, &token.data.tag.name);
-}
-
-bool is_template_element(const token_t token) {
-    static const char* template_tag = "template";
-
-    return parser_cstrcmp(template_tag, &token.data.tag.name);
-}
-
-bool is_raw_text_element(const token_t token) {
-    static const char* raw_text_tags[] = {
-        "script",
-        "style"
-    };
-    static const size_t arr_size = sizeof(raw_text_tags) / sizeof(raw_text_tags[0]);
-
-    return contains(raw_text_tags, arr_size, &token.data.tag.name);
-}
-
-bool is_escapable_raw_text_element(const token_t token) {
-    static const char* escapable_raw_text_tags[] = {
-        "textarea",
-        "title"
-    };
-    static const size_t arr_size = sizeof(escapable_raw_text_tags) / sizeof(escapable_raw_text_tags[0]);
-
-    return contains(escapable_raw_text_tags, arr_size, &token.data.tag.name);
-}
-
-bool is_foreign_element(token_t token) {
-    // TODO make this work
-    return false;
-}
-
-bool is_normal_element(token_t token) {
-    // TODO and this
-    return false;
-}
-
 bool is_peek_buf_empty(const tokenizer_t* tokenizer) {
     return tokenizer->peek_count == 0;
 }
@@ -283,6 +226,12 @@ void consume_character(tokenizer_t* tokenizer) {
 
 void reconsume_character(tokenizer_t* tokenizer) {
     tokenizer->consume_flag = true;
+}
+
+token_result_t reconsume_in(tokenizer_t* tokenizer, data_state_t state) {
+    tokenizer->data_state = state;
+    tokenizer->consume_flag = false;
+    return TOKEN_RECONSUME;
 }
 
 token_t get_character_token(const int c) {
@@ -497,11 +446,8 @@ token_result_t handle_tag_open_state(tokenizer_t* tokenizer) {
         case '?': {
             tokenizer->last_error = UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME;
             tokenizer->pending_token = get_new_comment_token();
-
             tokenizer->has_pending_token = true;
-            tokenizer->data_state = BOGUS_COMMENT_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, BOGUS_COMMENT_STATE);
         }
         case EOF: {
             tokenizer->last_error = EOF_BEFORE_TAG_NAME;
@@ -516,17 +462,13 @@ token_result_t handle_tag_open_state(tokenizer_t* tokenizer) {
             if (is_ascii_alpha(c)) {
                 tokenizer->pending_token = get_new_start_tag_token();
                 tokenizer->has_pending_token = true;
-                tokenizer->data_state = TAG_NAME_STATE;
-                tokenizer->consume_flag = false;
-                return TOKEN_RECONSUME;
+                return reconsume_in(tokenizer, TAG_NAME_STATE);
             }
             tokenizer->last_error = INVALID_FIRST_CHARACTER_OF_TAG_NAME;
             const token_t token = get_character_token(LESS_THAN_SIGN);
             if (emit_token(tokenizer, &token) == TOKEN_ERROR)
                 return TOKEN_ERROR;
-            tokenizer->data_state = DATA_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, DATA_STATE);
         }
     }
 }
@@ -555,16 +497,12 @@ token_result_t handle_end_tag_open_state(tokenizer_t* tokenizer) {
             if (is_ascii_alpha(c)) {
                 tokenizer->pending_token = get_new_end_tag_token();
                 tokenizer->has_pending_token = true;
-                tokenizer->data_state = TAG_NAME_STATE;
-                tokenizer->consume_flag = false;
-                return TOKEN_RECONSUME;
+                return reconsume_in(tokenizer, TAG_NAME_STATE);
             }
             tokenizer->last_error = INVALID_FIRST_CHARACTER_OF_TAG_NAME;
             tokenizer->pending_token = get_new_comment_token();
             tokenizer->has_pending_token = true;
-            tokenizer->data_state = BOGUS_COMMENT_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, BOGUS_COMMENT_STATE);
         }
     }
 }
@@ -622,9 +560,7 @@ token_result_t handle_rcdata_less_than_sign_state(tokenizer_t* tokenizer) {
     const token_t token = get_character_token(LESS_THAN_SIGN);
     if (emit_token(tokenizer, &token) != TOKEN_OK)
         return TOKEN_ERROR;
-    tokenizer->data_state = RCDATA_STATE;
-    tokenizer->consume_flag = false;
-    return TOKEN_RECONSUME;
+    return reconsume_in(tokenizer, RCDATA_STATE);
 }
 
 token_result_t handle_rcdata_end_tag_open_state(tokenizer_t* tokenizer) {
@@ -633,16 +569,12 @@ token_result_t handle_rcdata_end_tag_open_state(tokenizer_t* tokenizer) {
     if (is_ascii_alpha(c)) {
         tokenizer->pending_token = get_new_end_tag_token();
         tokenizer->has_pending_token = true;
-        tokenizer->data_state = RCDATA_END_TAG_NAME_STATE;
-        tokenizer->consume_flag = false;
-        return TOKEN_RECONSUME;
+        return reconsume_in(tokenizer, RCDATA_END_TAG_NAME_STATE);
     }
     const token_t token = get_character_token(LESS_THAN_SIGN);
     if (emit_token(tokenizer, &token) != TOKEN_OK)
         return TOKEN_ERROR;
-    tokenizer->data_state = RCDATA_STATE;
-    tokenizer->consume_flag = false;
-    return TOKEN_RECONSUME;
+    return reconsume_in(tokenizer, RCDATA_STATE);
 }
 
 token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer) {
@@ -653,20 +585,33 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer) {
         case LINE_FEED:
         case FORM_FEED:
         case SPACE: {
-            // TODO check if end tag token is appropriate
-            tokenizer->data_state = BEFORE_ATTRIBUTE_NAME_STATE;
-            return TOKEN_OK;
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == END_TAG);
+            if (parser_strcmp(&tokenizer->last_start_tag_name,
+                &tokenizer->pending_token.data.tag.name) == 0) {
+                tokenizer->data_state = BEFORE_ATTRIBUTE_NAME_STATE;
+                return TOKEN_OK;
+            }
             goto anything_else;
         }
         case SOLIDUS: {
-            // TODO check if end tag token is appropriate
-            tokenizer->data_state = SELF_CLOSING_START_TAG_STATE;
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == END_TAG);
+            if (parser_strcmp(&tokenizer->last_start_tag_name,
+                &tokenizer->pending_token.data.tag.name) == 0) {
+                tokenizer->data_state = SELF_CLOSING_START_TAG_STATE;
+                return TOKEN_OK;
+                }
             goto anything_else;
         }
         case '>': {
-            // check if end tag token is appropriate
-            tokenizer->data_state = DATA_STATE;
-            return emit_pending_token(tokenizer);
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == END_TAG);
+            if (parser_strcmp(&tokenizer->last_start_tag_name,
+                &tokenizer->pending_token.data.tag.name) == 0) {
+                tokenizer->data_state = DATA_STATE;
+                return emit_pending_token(tokenizer);;
+                }
             goto anything_else;
         }
         default: {
@@ -688,9 +633,7 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer) {
                     if (emit_token(tokenizer, &token) != TOKEN_OK)
                         return TOKEN_ERROR;
                 }
-                tokenizer->data_state = RCDATA_STATE;
-                tokenizer->consume_flag = false;
-                return TOKEN_RECONSUME;
+                return reconsume_in(tokenizer, RCDATA_STATE);
             }
         }
     }
@@ -709,9 +652,7 @@ token_result_t handle_before_attribute_name_state(tokenizer_t* tokenizer) {
         case SOLIDUS:
         case GREATER_THAN_SIGN:
         case EOF: {
-            tokenizer->data_state = AFTER_ATTRIBUTE_NAME_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, AFTER_ATTRIBUTE_NAME_STATE);
         }
         case '=': {
             tokenizer->last_error = UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME;
@@ -731,9 +672,7 @@ token_result_t handle_before_attribute_name_state(tokenizer_t* tokenizer) {
             const attribute_t attr = (attribute_t){0};
             if (attribute_list_append(attr_list, &attr) != 0)
                 return TOKEN_ERROR;
-            tokenizer->data_state = ATTRIBUTE_NAME_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, ATTRIBUTE_NAME_STATE);
         }
     }
 }
@@ -749,9 +688,7 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
         case SOLIDUS:
         case GREATER_THAN_SIGN:
         case EOF: {
-            tokenizer->data_state = AFTER_ATTRIBUTE_NAME_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, AFTER_ATTRIBUTE_NAME_STATE);
         }
         case '=': {
             tokenizer->data_state = BEFORE_ATTRIBUTE_VALUE_STATE;
@@ -772,12 +709,56 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
             // FALLTHROUGH
         }
         default: {
-            const attribute_list_t* attributes = &tokenizer->pending_token.data.tag.attributes;
-            assert(attributes->items != NULL);
+            attribute_list_t* attr_list = &tokenizer->pending_token.data.tag.attributes;
+            assert(attr_list->items != NULL);
 
-            if (parser_string_append_char(&attributes->items[attributes->count].name, c) != 0)
+            attribute_t* attr = get_current_attribute(attr_list);
+            // if (parser_string_append_char(&attr_list->items[attr_list->count].name, c) != 0)
+            if (parser_string_append_char(&attr->name, c) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
+        }
+    }
+}
+
+token_result_t handle_after_attribute_name_state(tokenizer_t* tokenizer) {
+    handle_consume_flag(tokenizer);
+    const int c = tokenizer->current_char;
+    switch (c) {
+        case CHARACTER_TABULATION:
+        case LINE_FEED:
+        case FORM_FEED:
+        case SPACE: {
+            return TOKEN_OK;
+        }
+        case SOLIDUS: {
+            tokenizer->data_state = SELF_CLOSING_START_TAG_STATE;
+            return TOKEN_OK;
+        }
+        case EQUALS_SIGN: {
+            tokenizer->data_state = BEFORE_ATTRIBUTE_VALUE_STATE;
+            return TOKEN_OK;
+        }
+        case GREATER_THAN_SIGN: {
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            tokenizer->data_state = DATA_STATE;
+            return emit_pending_token(tokenizer);
+        }
+        case EOF: {
+            tokenizer->last_error = EOF_IN_TAG;
+            const token_t eof_token = get_eof_token();
+            return emit_token(tokenizer, &eof_token);
+        }
+        default: {
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            attribute_list_t* attr_list = &tokenizer->pending_token.data.tag.attributes;
+
+            const attribute_t attr = (attribute_t){0};
+            if (attribute_list_append(attr_list, &attr) != 0)
+                return TOKEN_ERROR;
+            return reconsume_in(tokenizer, ATTRIBUTE_NAME_STATE);
         }
     }
 }
@@ -809,9 +790,153 @@ token_result_t handle_before_attribute_value_state(tokenizer_t* tokenizer) {
             return emit_pending_token(tokenizer);
         }
         default: {
-            tokenizer->data_state = ATTRIBUTE_VALUE_UNQUOTE_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, ATTRIBUTE_VALUE_UNQUOTED_STATE);
+        }
+    }
+}
+
+token_result_t handle_attribute_value_quoted_state(tokenizer_t* tokenizer, const int quote_type) {
+    assert(quote_type == QUOTATION_MARK ||
+        quote_type == APOSTROPHE);
+    handle_consume_flag(tokenizer);
+    const int c = tokenizer->current_char;
+    switch (c) {
+        case AMPERSAND: {
+            if (quote_type == QUOTATION_MARK)
+                tokenizer->return_state = ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE;
+            if (quote_type == APOSTROPHE)
+                tokenizer->return_state = ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE;
+            tokenizer->data_state = CHARACTER_REFERENCE_STATE;
+            return TOKEN_OK;
+        }
+        case NULL_CHARACTER: {
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
+            if (append_to_current_attr(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        case EOF: {
+            tokenizer->last_error = EOF_IN_TAG;
+            const token_t token = get_eof_token();
+            if (emit_token(tokenizer, &token) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        default: {
+            if (quote_type == QUOTATION_MARK) {
+                tokenizer->data_state = AFTER_ATTRIBUTE_VALUE_QUOTED_STATE;
+                return TOKEN_OK;
+            }
+            if (quote_type == APOSTROPHE) {
+                tokenizer->data_state = AFTER_ATTRIBUTE_VALUE_QUOTED_STATE;
+                return TOKEN_OK;
+            }
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            if (append_to_current_attr(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+    }
+}
+
+token_result_t handle_attribute_value_double_quoted_state(tokenizer_t* tokenizer) {
+    return handle_attribute_value_quoted_state(tokenizer, QUOTATION_MARK);
+}
+
+token_result_t handle_attribute_value_single_quoted_state(tokenizer_t* tokenizer) {
+    return handle_attribute_value_quoted_state(tokenizer, APOSTROPHE);
+}
+
+token_result_t handle_attribute_value_unquoted_state(tokenizer_t* tokenizer) {
+    handle_consume_flag(tokenizer);
+    const int c = tokenizer->current_char;
+    switch (c) {
+        case CHARACTER_TABULATION:
+        case LINE_FEED:
+        case FORM_FEED:
+        case SPACE: {
+            tokenizer->data_state = BEFORE_ATTRIBUTE_NAME_STATE;
+            return TOKEN_OK;
+        }
+        case AMPERSAND: {
+            tokenizer->return_state = ATTRIBUTE_VALUE_UNQUOTED_STATE;
+            tokenizer->data_state = CHARACTER_REFERENCE_STATE;
+            return TOKEN_OK;
+        }
+        case GREATER_THAN_SIGN: {
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            tokenizer->return_state = DATA_STATE;
+            return emit_pending_token(tokenizer);
+        }
+        case NULL_CHARACTER: {
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
+            if (append_to_current_attr(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        case QUOTATION_MARK:
+        case APOSTROPHE:
+        case LESS_THAN_SIGN:
+        case EQUALS_SIGN:
+        case GRAVE_ACCENT: {
+            tokenizer->last_error = UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE;
+            break;
+            // anything else case
+        }
+        case EOF: {
+            tokenizer->last_error = EOF_IN_TAG;
+            const token_t token = get_eof_token();
+            if (emit_token(tokenizer, &token) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        default: {
+            break;
+            // anything else case
+        }
+    }
+
+    // anything else
+    if (append_to_current_attr(&tokenizer->pending_token, c) != 0)
+        return TOKEN_ERROR;
+    return TOKEN_OK;
+}
+
+token_result_t handle_after_attribute_value_quoted_state(tokenizer_t* tokenizer) {
+    handle_consume_flag(tokenizer);
+    const int c = tokenizer->current_char;
+    switch (c) {
+        case CHARACTER_TABULATION:
+        case LINE_FEED:
+        case FORM_FEED:
+        case SPACE: {
+            tokenizer->data_state = BEFORE_ATTRIBUTE_NAME_STATE;
+            return TOKEN_OK;
+        }
+        case SOLIDUS: {
+            tokenizer->data_state = SELF_CLOSING_START_TAG_STATE;
+            return TOKEN_OK;
+        }
+        case GREATER_THAN_SIGN: {
+            tokenizer->data_state = DATA_STATE;
+            return emit_pending_token(tokenizer);
+        }
+        case EOF: {
+            tokenizer->last_error = EOF_IN_TAG;
+            const token_t token = get_eof_token();
+            if (emit_token(tokenizer, &token) != 0)
+                return TOKEN_ERROR;
+            return TOKEN_OK;
+        }
+        default: {
+            tokenizer->last_error = MISSING_WHITESPACE_BETWEEN_ATTRIBUTES;
+            return reconsume_in(tokenizer, BEFORE_ATTRIBUTE_NAME_STATE);
         }
     }
 }
@@ -863,9 +988,7 @@ token_result_t handle_doctype_state(tokenizer_t* tokenizer) {
             return TOKEN_OK;
         }
         case GREATER_THAN_SIGN: {
-            tokenizer->data_state = BEFORE_DOCTYPE_NAME_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, BEFORE_DOCTYPE_NAME_STATE);
         }
         case EOF: {
             tokenizer->last_error = EOF_IN_DOCTYPE;
@@ -879,9 +1002,7 @@ token_result_t handle_doctype_state(tokenizer_t* tokenizer) {
         }
         default: {
             tokenizer->last_error = MISSING_WHITESPACE_BEFORE_DOCTYPE_NAME;
-            tokenizer->data_state = BEFORE_DOCTYPE_NAME_STATE;
-            tokenizer->consume_flag = false;
-            return TOKEN_RECONSUME;
+            return reconsume_in(tokenizer, BEFORE_DOCTYPE_NAME_STATE);
         }
     }
 }
@@ -1054,12 +1175,12 @@ int token_next(tokenizer_t* tokenizer) {
         [SCRIPT_DATA_DOUBLE_ESCAPE_END_STATE] = NULL,
         [BEFORE_ATTRIBUTE_NAME_STATE] = handle_before_attribute_name_state,
         [ATTRIBUTE_NAME_STATE] = handle_attribute_name_state,
-        [AFTER_ATTRIBUTE_NAME_STATE] = NULL,
+        [AFTER_ATTRIBUTE_NAME_STATE] = handle_after_attribute_name_state,
         [BEFORE_ATTRIBUTE_VALUE_STATE] = handle_before_attribute_value_state,
-        [ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE] = NULL,
-        [ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE] = NULL,
-        [ATTRIBUTE_VALUE_UNQUOTE_STATE] = NULL,
-        [AFTER_ATTRIBUTE_VALUE_QUOTED_STATE] = NULL,
+        [ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE] = handle_attribute_value_double_quoted_state,
+        [ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE] = handle_attribute_value_single_quoted_state,
+        [ATTRIBUTE_VALUE_UNQUOTED_STATE] = handle_attribute_value_unquoted_state,
+        [AFTER_ATTRIBUTE_VALUE_QUOTED_STATE] = handle_after_attribute_value_quoted_state,
         [SELF_CLOSING_START_TAG_STATE] = NULL,
         [BOGUS_COMMENT_STATE] = NULL,
         [MARKUP_DECLARATION_OPEN_STATE] = handle_markup_declaration_open_state,
@@ -1090,7 +1211,7 @@ int token_next(tokenizer_t* tokenizer) {
         }
         result = handler(tokenizer);
         if (tokenizer->last_error != NO_ERROR) {
-            fprintf(stderr, "Encountered parse error at character %c (%zu): %s",
+            fprintf(stderr, "Encountered parse error at character %c (%zu): %s\n",
                 tokenizer->current_char,
                 tokenizer->chars_consumed,
                 parse_error_to_string(tokenizer->last_error));

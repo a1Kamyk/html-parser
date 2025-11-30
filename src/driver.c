@@ -89,7 +89,7 @@ int run_parser(const int argc, char **argv) {
 
     dom_node_t* dom_root = parse_document(&parser);
 
-    printf("%p", dom_root);
+    printf("%p\n", dom_root);
 
     return 0;
 }
@@ -113,13 +113,13 @@ void parser_init(parser_t* parser, FILE* stream) {
     tokenizer->pending_token = (token_t){ .type = NONE };
     tokenizer->has_pending_token = false;
     tokenizer->temporary_buffer = (string_t){};
+    tokenizer->last_start_tag_name = (string_t){};
     tokenizer->last_error = NO_ERROR;
 
     tokenizer->token_queue = &parser->token_queue;
     tokenizer->stream = stream;
     tokenizer->chars_consumed = 0;
     tokenizer->peek_count = 0;
-    tokenizer->parser = parser;
 
     parser_string_init_sized(&tokenizer->temporary_buffer, TEMPORARY_BUFFER_SIZE);
 

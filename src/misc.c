@@ -1,5 +1,9 @@
 #include "misc.h"
 
+#include <assert.h>
+
+#include "tokenizer.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -166,10 +170,20 @@ int attribute_list_move(attribute_list_t* dest, attribute_list_t* src) {
     return 0;
 }
 
-bool contains(const char* arr[], const size_t arr_size, const string_t* str) {
-    for (size_t i = 0; i < arr_size; i++) {
-        if (parser_cstrcmp(arr[i], str) == 0) return true;
-    }
+attribute_t* get_current_attribute(const attribute_list_t* list) {
+    if (!list)
+        return NULL;
+    if (list->count == 0 || list->capacity == 0)
+        return NULL;
+    return list->items + (list->count - 1);
+}
 
-    return false;
+int append_to_current_attr(token_t* token, const int c) {
+    assert(token->type == START_TAG);
+    attribute_t* attr = get_current_attribute(&token->data.tag.attributes);
+    if (!attr)
+        return 1;
+    if (parser_string_append_char(&attr->name, c) != 0)
+        return 1;
+    return 0;
 }

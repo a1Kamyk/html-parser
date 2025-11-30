@@ -11,12 +11,15 @@
 #define CARRIAGE_RETURN         0x000D
 #define SPACE                   0x0020
 
-#define REPLACEMENT_CHARACTER   0xFFFD
+#define QUOTATION_MARK          0x0022
+#define AMPERSAND               0x0026
+#define APOSTROPHE              0x0027
 #define SOLIDUS                 0x002F
 #define LESS_THAN_SIGN          0x003C
+#define EQUALS_SIGN             0x003D
 #define GREATER_THAN_SIGN       0x003E
-#define QUOTATION_MARK          0x0022
-#define APOSTROPHE              0x0027
+#define GRAVE_ACCENT            0x0060
+#define REPLACEMENT_CHARACTER   0xFFFD
 
 #define STRING_DEFAULT_CAPACITY 8
 #define ATTR_LIST_DEFAULT_CAPACITY 4
@@ -24,6 +27,8 @@
 
 #define parser_max(a, b) (a > b ? a : b)
 #define parser_min(a, b) (a < b ? a : b)
+
+typedef struct token_s token_t;
 
 static inline bool is_ascii_upper_alpha(const int c) {
     return (0x0041 <= c && c <= 0x005A);
@@ -85,7 +90,8 @@ int attribute_list_clear(attribute_list_t* list);
 int attribute_list_delete(attribute_list_t* list);
 int attribute_list_append(attribute_list_t* list, const attribute_t* item);
 int attribute_list_move(attribute_list_t* dest, attribute_list_t* src);
+attribute_t* get_current_attribute(const attribute_list_t* list);
 
-bool contains(const char* arr[], size_t arr_size, const string_t* str);
+int append_to_current_attr(token_t* token, int c);
 
 #endif //HTML_PARSER_MISC_H

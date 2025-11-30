@@ -10,7 +10,6 @@
 #define PEEK_BUFFER_LEN   16
 
 typedef struct dom_tree_node dom_node_t;
-struct parser;
 
 typedef enum {
     TOKEN_OK,
@@ -112,7 +111,7 @@ typedef enum {
     BEFORE_ATTRIBUTE_VALUE_STATE,
     ATTRIBUTE_VALUE_DOUBLE_QUOTED_STATE,
     ATTRIBUTE_VALUE_SINGLE_QUOTED_STATE,
-    ATTRIBUTE_VALUE_UNQUOTE_STATE,
+    ATTRIBUTE_VALUE_UNQUOTED_STATE,
     AFTER_ATTRIBUTE_VALUE_QUOTED_STATE,
     SELF_CLOSING_START_TAG_STATE,
     BOGUS_COMMENT_STATE,
@@ -203,7 +202,7 @@ typedef union {
 } token_data_t;
 
 /// Token type
-typedef struct {
+typedef struct token_s {
     token_type_t type;
     token_data_t data;
 } token_t;
@@ -226,6 +225,7 @@ typedef struct {
     token_t             pending_token;
     bool                has_pending_token;
     string_t            temporary_buffer;
+    string_t            last_start_tag_name;
     parse_error_t       last_error;
 
     /// Helper and miscellaneous fields
@@ -234,7 +234,6 @@ typedef struct {
     size_t              chars_consumed;
     int                 peek_buffer[PEEK_BUFFER_LEN];
     size_t              peek_count;
-    struct parser*      parser;
 } tokenizer_t;
 
 void queue_init(token_queue_t* queue);
@@ -243,18 +242,12 @@ int queue_push(token_queue_t* queue, const token_t* token);
 bool queue_is_empty(const token_queue_t* queue);
 bool queue_is_full(const token_queue_t* queue);
 
-bool is_void_element(token_t token);
-bool is_template_element(token_t token);
-bool is_raw_text_element(token_t token);
-bool is_escapable_raw_text_element(token_t token);
-bool is_foreign_element(token_t token);
-bool is_normal_element(token_t token);
-
 bool is_peek_buf_empty(const tokenizer_t* tokenizer);
 bool try_match_peek_buf(tokenizer_t* tokenizer, const char* str);
 void consume_peek_buf(tokenizer_t* tokenizer);
 void consume_character(tokenizer_t* tokenizer);
 void reconsume_character(tokenizer_t* tokenizer);
+token_result_t reconsume_in(tokenizer_t* tokenizer, data_state_t state);
 token_t get_character_token(int c);
 token_t get_eof_token();
 token_t get_new_start_tag_token();
@@ -280,11 +273,12 @@ token_result_t handle_rcdata_end_tag_name_state(tokenizer_t* tokenizer);
 
 token_result_t handle_before_attribute_name_state(tokenizer_t* tokenizer);
 token_result_t handle_attribute_name_state(tokenizer_t* tokenizer);
-// after attribute name state
+token_result_t handle_after_attribute_name_state(tokenizer_t* tokenizer);
 token_result_t handle_before_attribute_value_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_value_quoted_state(tokenizer_t* tokenizer, int quote_type);
 token_result_t handle_attribute_value_double_quoted_state(tokenizer_t* tokenizer);
-token_result_t handle_attribute_value_single_quote_state(tokenizer_t* tokenizer);
-token_result_t handle_attribute_value_unquote_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_value_single_quoted_state(tokenizer_t* tokenizer);
+token_result_t handle_attribute_value_unquoted_state(tokenizer_t* tokenizer);
 token_result_t handle_after_attribute_value_quoted_state(tokenizer_t* tokenizer);
 
 token_result_t handle_markup_declaration_open_state(tokenizer_t* tokenizer);
