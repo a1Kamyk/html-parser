@@ -709,11 +709,11 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
             // FALLTHROUGH
         }
         default: {
-            attribute_list_t* attr_list = &tokenizer->pending_token.data.tag.attributes;
+            const attribute_list_t* attr_list = &tokenizer->pending_token.data.tag.attributes;
             assert(attr_list->items != NULL);
-
             attribute_t* attr = get_current_attribute(attr_list);
-            // if (parser_string_append_char(&attr_list->items[attr_list->count].name, c) != 0)
+            if (!attr)
+                return TOKEN_ERROR;
             if (parser_string_append_char(&attr->name, c) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
@@ -825,11 +825,11 @@ token_result_t handle_attribute_value_quoted_state(tokenizer_t* tokenizer, const
             return TOKEN_OK;
         }
         default: {
-            if (quote_type == QUOTATION_MARK) {
+            if (c == QUOTATION_MARK) {
                 tokenizer->data_state = AFTER_ATTRIBUTE_VALUE_QUOTED_STATE;
                 return TOKEN_OK;
             }
-            if (quote_type == APOSTROPHE) {
+            if (c == APOSTROPHE) {
                 tokenizer->data_state = AFTER_ATTRIBUTE_VALUE_QUOTED_STATE;
                 return TOKEN_OK;
             }
