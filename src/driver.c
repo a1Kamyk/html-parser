@@ -134,8 +134,13 @@ void parser_init(parser_t* parser, FILE* stream) {
     builder->pending_node = (dom_node_t){ .type = DOM_NONE };
     builder->has_pending_node = false;
 
+    builder->parser = parser;
     builder->open_elem_stack = &parser->open_elem_stack;
     builder->token_stream = &parser->token_queue;
     builder->root_node = NULL;
     builder->head_element = NULL;
+}
+
+void parser_change_tokenizer_state(parser_t* parser, data_state_t state) {
+    parser->tokenizer.data_state = state;
 }

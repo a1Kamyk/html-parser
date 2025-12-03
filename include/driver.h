@@ -12,8 +12,9 @@ typedef struct parser {
     token_queue_t       token_queue;
 } parser_t;
 
-dom_node_t* parse_document(parser_t* parser);
 int run_parser(int argc, char **argv);
+dom_node_t* parse_document(parser_t* parser);
 void parser_init(parser_t* parser, FILE* stream);
+void parser_change_tokenizer_state(parser_t* parser, data_state_t state);
 
 #endif //HTML_PARSER_DRIVER_H
