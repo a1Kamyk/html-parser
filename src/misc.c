@@ -94,6 +94,25 @@ int parser_string_append_char(string_t* str, const int c) {
     return 0;
 }
 
+int parser_string_append_view(string_t* str, const string_view_t view) {
+    if (str->length + view.length > str->capacity) {
+        const size_t new_capacity = (str->length + view.length > str->capacity) ?
+            str->length + view.length :
+            str->capacity * CAPACITY_EXPANSION_COEF;
+        int* new_data = realloc(str->data, new_capacity * sizeof(int));
+        if (!new_data) {
+            fprintf(stderr, "Out of memory allocating new string\n");
+            return 1;
+        }
+        str->data = new_data;
+        str->capacity = new_capacity;
+    }
+
+    for (size_t i = 0; i < view.length; i++)
+        str->data[str->length++] = view.data[i];
+    return 0;
+}
+
 int parser_move_string(string_t* dest, string_t* src) {
     if (!dest || !src)
         return 1;
@@ -104,6 +123,20 @@ int parser_move_string(string_t* dest, string_t* src) {
     src->length = 0;
 
     return 0;
+}
+
+string_view_t view_from_parser_string(const string_t* str) {
+    return (string_view_t){
+        .data = str->data,
+        .length = str->length
+    };
+}
+
+string_view_t view_from_int_array(const int* str, const size_t size) {
+    return (string_view_t){
+        .data = str,
+        .length = size
+    };
 }
 
 int attribute_list_init(attribute_list_t* list) {
@@ -178,7 +211,7 @@ attribute_t* get_current_attribute(const attribute_list_t* list) {
     return list->items + (list->count - 1);
 }
 
-int append_to_current_attr(token_t* token, const int c) {
+int append_to_current_attr_name(const token_t* token, const int c) {
     assert(token->type == START_TAG);
     attribute_t* attr = get_current_attribute(&token->data.tag.attributes);
     if (!attr)

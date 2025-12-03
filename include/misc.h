@@ -61,6 +61,11 @@ typedef struct {
     size_t capacity;
 } string_t;
 
+typedef struct {
+    const int* data;
+    size_t length;
+} string_view_t;
+
 int parser_string_init(string_t* str);
 int parser_string_init_sized(string_t* str, size_t capacity);
 int parser_string_init_cstr(string_t* str, const char* cstr);
@@ -69,7 +74,11 @@ int parser_string_delete(string_t* str);
 int parser_strcmp(const string_t* str1, const string_t* str2);
 int parser_cstrcmp(const char* str1, const string_t* str2);
 int parser_string_append_char(string_t* str, int c);
+int parser_string_append_view(string_t* str, string_view_t view);
 int parser_move_string(string_t* dest, string_t* src);
+
+string_view_t view_from_parser_string(const string_t* str);
+string_view_t view_from_int_array(const int* str, size_t size);
 
 /// Attribute type
 typedef struct {
@@ -92,6 +101,6 @@ int attribute_list_append(attribute_list_t* list, const attribute_t* item);
 int attribute_list_move(attribute_list_t* dest, attribute_list_t* src);
 attribute_t* get_current_attribute(const attribute_list_t* list);
 
-int append_to_current_attr(token_t* token, int c);
+int append_to_current_attr_name(const token_t* token, int c);
 
 #endif //HTML_PARSER_MISC_H
