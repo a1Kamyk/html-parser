@@ -695,10 +695,10 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
             return TOKEN_OK;
         }
         case NULL_CHARACTER: {
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
-            const attribute_list_t* attributes = &tokenizer->pending_token.data.tag.attributes;
-            const int res = parser_string_append_char(&attributes->items[attributes->count].name, REPLACEMENT_CHARACTER);
-            if (res != 0)
+            if (append_to_current_attr_name(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -709,12 +709,9 @@ token_result_t handle_attribute_name_state(tokenizer_t* tokenizer) {
             // FALLTHROUGH
         }
         default: {
-            const attribute_list_t* attr_list = &tokenizer->pending_token.data.tag.attributes;
-            assert(attr_list->items != NULL);
-            attribute_t* attr = get_current_attribute(attr_list);
-            if (!attr)
-                return TOKEN_ERROR;
-            if (parser_string_append_char(&attr->name, c) != 0)
+            assert(tokenizer->has_pending_token &&
+                tokenizer->pending_token.type == START_TAG);
+            if (append_to_current_attr_name(&tokenizer->pending_token, c) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -813,7 +810,7 @@ token_result_t handle_attribute_value_quoted_state(tokenizer_t* tokenizer, const
             assert(tokenizer->has_pending_token &&
                 tokenizer->pending_token.type == START_TAG);
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
-            if (append_to_current_attr(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
+            if (append_to_current_attr_name(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -835,7 +832,7 @@ token_result_t handle_attribute_value_quoted_state(tokenizer_t* tokenizer, const
             }
             assert(tokenizer->has_pending_token &&
                 tokenizer->pending_token.type == START_TAG);
-            if (append_to_current_attr(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
+            if (append_to_current_attr_name(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -876,7 +873,7 @@ token_result_t handle_attribute_value_unquoted_state(tokenizer_t* tokenizer) {
             assert(tokenizer->has_pending_token &&
                 tokenizer->pending_token.type == START_TAG);
             tokenizer->last_error = UNEXPECTED_NULL_CHARACTER;
-            if (append_to_current_attr(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
+            if (append_to_current_attr_name(&tokenizer->pending_token, REPLACEMENT_CHARACTER) != 0)
                 return TOKEN_ERROR;
             return TOKEN_OK;
         }
@@ -903,7 +900,7 @@ token_result_t handle_attribute_value_unquoted_state(tokenizer_t* tokenizer) {
     }
 
     // anything else
-    if (append_to_current_attr(&tokenizer->pending_token, c) != 0)
+    if (append_to_current_attr_name(&tokenizer->pending_token, c) != 0)
         return TOKEN_ERROR;
     return TOKEN_OK;
 }
