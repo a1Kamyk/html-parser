@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "tokenizer.h"
+#include "driver.h"
 
 static const size_t INITIAL_CHILD_CAPACITY = 4;
 static const size_t DYN_ARR_EXPANSION_COEFFICIENT = 2;
@@ -173,9 +173,12 @@ void stack_init(open_elem_stack_t* stack) {
 }
 
 int stack_pop(open_elem_stack_t* stack, dom_node_t** out) {
-    if (!stack || !out || stack_is_empty(stack))
+    if (!stack || stack_is_empty(stack))
         return 1;
-
+    if (!out) {
+        stack->stack_top--;
+        return 0;
+    }
     *out = stack->elements[stack->stack_top--];
     return 0;
 }
@@ -366,6 +369,26 @@ node_result_t process_in(tree_builder_t* builder, insertion_state_t state) {
     builder->temporary_state_flag = true;
     builder->consume_flag = false;
     return NODE_REPROCESS;
+}
+
+node_result_t reprocess_in(tree_builder_t* builder, insertion_state_t state) {
+    builder->insertion_state = state;
+    builder->consume_flag = false;
+    return NODE_REPROCESS;
+}
+
+node_result_t parse_text_elements(tree_builder_t* builder, const data_state_t text_state) {
+    assert(text_state == RAWTEXT_STATE || text_state == RCDATA_STATE);
+    dom_node_t* node = insert_element_for_token(builder, &builder->current_token, false, NULL);
+    if (!node)
+        return NODE_ERROR;
+    if (text_state == RAWTEXT_STATE)
+        parser_change_tokenizer_state(builder->parser, RAWTEXT_STATE);
+    if (text_state == RCDATA_STATE)
+        parser_change_tokenizer_state(builder->parser, RCDATA_STATE);
+    builder->temporary_state = TEXT;
+    builder->temporary_state_flag = true;
+    return NODE_OK;
 }
 
 static void set_default_params(dom_node_t* node) {
@@ -702,9 +725,7 @@ node_result_t handle_before_head_state(tree_builder_t* builder) {
     if (!node)
         return NODE_ERROR;
     builder->head_element = node;
-    builder->insertion_state = IN_HEAD;
-    builder->consume_flag = false;
-    return NODE_REPROCESS;
+    return reprocess_in(builder, IN_HEAD);
 
     fail:
     delete_tree_node(&builder->pending_node);
@@ -733,39 +754,83 @@ node_result_t handle_in_head_state(tree_builder_t* builder) {
         return NODE_ERROR;
     }
     if (current_token->type == START_TAG) {
-        const tag_token* data = &current_token->data.tag;
+        tag_token* data = &current_token->data.tag;
         if (parser_cstrcmp("html", &data->name) == 0) {
             return process_in(builder, IN_BODY);
         }
-        if (parser_cstrcmp("head", &data->name) == 0) {
+        if (parser_cstrcmp("base", &data->name) == 0 ||
+            parser_cstrcmp("basefont", &data->name) == 0 ||
+            parser_cstrcmp("bgsound", &data->name) == 0 ||
+            parser_cstrcmp("link", &data->name) == 0) {
             dom_node_t* node = insert_element_for_token(builder, current_token, false, NULL);
             if (!node)
                 return NODE_ERROR;
-            builder->head_element = node;
-            builder->insertion_state = IN_HEAD;
+            if (stack_pop(builder->open_elem_stack, NULL) != 0)
+                return NODE_ERROR;
+            // acknowledged self-closing flag
             return NODE_OK;
         }
-        return NODE_OK;
+        if (parser_cstrcmp("meta", &data->name) == 0) {
+            dom_node_t* meta_node = insert_element_for_token(builder, current_token, false, NULL);
+            if (!meta_node)
+                return NODE_ERROR;
+            if (stack_pop(builder->open_elem_stack, NULL) != 0)
+                return NODE_ERROR;
+            // acknowledged self-closing flag
+            // omitting active-speculative-parser
+            return NODE_OK;
+        }
+        if (parser_cstrcmp("title", &data->name) == 0) {
+            return parse_text_elements(builder, RCDATA_STATE);
+        }
+        // omitting "noscript" tag with scripting enabled
+        if (parser_cstrcmp("noframes", &data->name) == 0 ||
+            parser_cstrcmp("style", &data->name) == 0) {
+            return parse_text_elements(builder, RAWTEXT_STATE);
+        }
+        if (parser_cstrcmp("noscript", &data->name) == 0) {
+            dom_node_t* node = insert_element_for_token(builder, current_token, false, NULL);
+            if (!node)
+                return NODE_ERROR;
+            builder->insertion_state = IN_HEAD_NOSCRIPT;
+            return NODE_OK;
+        }
+        if (parser_cstrcmp("script", &data->name) == 0) {
+            // not handling scripts
+            return NODE_ERROR;
+        }
+        if (parser_cstrcmp("template", &data->name) == 0) {
+            // not handling templates
+            return NODE_ERROR;
+        }
+        if (parser_cstrcmp("head", &data->name) == 0) {
+            return NODE_ERROR;
+        }
+        goto anything_else;
     }
     if (current_token->type == END_TAG) {
         const tag_token* data = &current_token->data.tag;
-        if (parser_cstrcmp("head", &data->name) == 0 ||
-            parser_cstrcmp("body", &data->name) == 0 ||
+        if (parser_cstrcmp("head", &data->name) == 0) {
+            if (stack_pop(builder->open_elem_stack, NULL) != 0)
+                return NODE_ERROR;
+            builder->insertion_state = AFTER_HEAD;
+            return NODE_OK;
+        }
+        if (parser_cstrcmp("body", &data->name) == 0 ||
             parser_cstrcmp("html", &data->name) == 0 ||
             parser_cstrcmp("br", &data->name) == 0) {
             goto anything_else;
         }
-        return NODE_OK;
+        if (parser_cstrcmp("template", &data->name) == 0) {
+            // not handling templates
+            return NODE_ERROR;
+        }
+        return NODE_ERROR;
     }
     anything_else:
-    token_t token = get_new_start_tag_token();
-    if (parser_string_init_cstr(&token.data.tag.name, "head") != 0)
+    if (stack_pop(builder->open_elem_stack, NULL) != 0)
         return NODE_ERROR;
-    dom_node_t* head_node = insert_element_for_token(builder, &token, false, NULL);
-    if (!head_node)
-        return NODE_ERROR;
-    builder->insertion_state = IN_HEAD;
-    return NODE_OK;
+    return reprocess_in(builder, AFTER_HEAD);
 }
 
 int tree_node_next(tree_builder_t* builder) {

@@ -6,6 +6,8 @@
 
 #define OPEN_ELEM_STACK_SIZE 32
 
+typedef struct parser parser_t;
+
 typedef enum {
     NODE_OK,
     NODE_ERROR,
@@ -107,6 +109,7 @@ typedef struct {
     bool                has_pending_node;
 
     /// Helper and miscellaneous fields
+    parser_t*           parser;
     open_elem_stack_t*  open_elem_stack;
     token_queue_t*      token_stream;
     dom_node_t*         root_node;
@@ -134,6 +137,8 @@ void delete_token(token_t* token);
 void consume_token(tree_builder_t* builder);
 void reprocess_token(tree_builder_t* builder);
 node_result_t process_in(tree_builder_t* builder, insertion_state_t state);
+node_result_t reprocess_in(tree_builder_t* builder, insertion_state_t state);
+node_result_t parse_text_elements(tree_builder_t* builder, data_state_t text_state);
 dom_node_t get_new_comment_node();
 dom_node_t get_new_doctype_node();
 dom_node_t get_new_element_node();
