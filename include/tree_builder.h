@@ -64,11 +64,16 @@ typedef struct {
     string_t text;
 } comment_node_t;
 
+typedef struct {
+    string_t text;
+} text_node_t;
+
 /// Data of stored node
 typedef union {
-    doctype_node_t doctype;
-    element_node_t element;
-    comment_node_t comment;
+    doctype_node_t  doctype;
+    element_node_t  element;
+    comment_node_t  comment;
+    text_node_t     text_node;
 } node_data_t;
 
 typedef struct dom_tree_node {
@@ -123,19 +128,24 @@ void delete_tree_node(dom_node_t* node);
 void delete_doctype_node_data(doctype_node_t* node);
 void delete_element_node_data(element_node_t* node);
 void delete_comment_node_data(comment_node_t* node);
+void delete_text_node_data(text_node_t* node);
 void delete_token(token_t* token);
 
 void consume_token(tree_builder_t* builder);
 void reprocess_token(tree_builder_t* builder);
-int get_new_comment_node(dom_node_t* out);
-int get_new_doctype_node(dom_node_t* out);
-int get_new_element_node(dom_node_t* out);
+node_result_t process_in(tree_builder_t* builder, insertion_state_t state);
+dom_node_t get_new_comment_node();
+dom_node_t get_new_doctype_node();
+dom_node_t get_new_element_node();
+dom_node_t get_new_text_node();
 int get_element_for_token(dom_node_t* out, token_t* token);
 dom_node_t* insert_element_for_token(tree_builder_t* builder,
                              token_t* token,
                              bool only_add_to_element_stack,
                              dom_node_t* insert_location);
 dom_node_t* current_insertion_point(const tree_builder_t* builder);
+dom_node_t* insert_characters(const tree_builder_t* builder, string_view_t data);
+dom_node_t* insert_character(const tree_builder_t* builder, int c);
 
 /// State handlers
 node_result_t handle_initial_state(tree_builder_t* builder);

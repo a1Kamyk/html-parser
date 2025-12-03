@@ -280,8 +280,10 @@ void delete_tree_node(dom_node_t* node) {
         case DOM_DOCTYPE:
             delete_doctype_node_data(&node->data.doctype);
             break;
-        case DOM_ROOT:
         case DOM_TEXT:
+            delete_text_node_data(&node->data.text_node);
+            break;
+        case DOM_ROOT:
             break;
         default: {
             printf("Unknown node type %s\n", node_type_to_string(node->type));
@@ -306,6 +308,12 @@ void delete_element_node_data(element_node_t* node) {
 }
 
 void delete_comment_node_data(comment_node_t* node) {
+    if (!node)
+        return;
+    parser_string_delete(&node->text);
+}
+
+void delete_text_node_data(text_node_t* node) {
     if (!node)
         return;
     parser_string_delete(&node->text);
@@ -353,6 +361,13 @@ void reprocess_token(tree_builder_t* builder) {
     builder->consume_flag = true;
 }
 
+node_result_t process_in(tree_builder_t* builder, insertion_state_t state) {
+    builder->temporary_state = state;
+    builder->temporary_state_flag = true;
+    builder->consume_flag = false;
+    return NODE_REPROCESS;
+}
+
 static void set_default_params(dom_node_t* node) {
     node->parent = NULL;
     node->children = NULL;
@@ -360,32 +375,44 @@ static void set_default_params(dom_node_t* node) {
     node->children_capacity = 0;
 }
 
-int get_new_comment_node(dom_node_t* out) {
-    out->type = DOM_COMMENT;
-    set_default_params(out);
-
-    return 0;
+dom_node_t get_new_comment_node() {
+    dom_node_t comment_node = {0};
+    comment_node.type = DOM_COMMENT;
+    set_default_params(&comment_node);
+    return comment_node;
 }
 
-int get_new_doctype_node(dom_node_t* out) {
-    out->type = DOM_DOCTYPE;
-    set_default_params(out);
-
-    out->data.doctype.name = (string_t){0};
-    out->data.doctype.public_id = (string_t){0};
-    out->data.doctype.system_id = (string_t){0};
-
-    return 0;
+dom_node_t get_new_doctype_node() {
+    dom_node_t doctype_node = {0};
+    doctype_node.type = DOM_DOCTYPE;
+    set_default_params(&doctype_node);
+    doctype_node.data.doctype = (doctype_node_t){
+        .name = (string_t){0},
+        .public_id = (string_t){0},
+        .system_id = (string_t){0}
+    };
+    return doctype_node;
 }
 
-int get_new_element_node(dom_node_t* out) {
-    out->type = DOM_ELEMENT;
-    set_default_params(out);
+dom_node_t get_new_element_node() {
+    dom_node_t element_node = {0};
+    element_node.type = DOM_ELEMENT;
+    set_default_params(&element_node);
+    element_node.data.element = (element_node_t){
+        .tag_name = (string_t){0},
+        .attributes = (attribute_list_t){0}
+    };
+    return element_node;
+}
 
-    out->data.element.attributes = (attribute_list_t){0};
-    out->data.element.tag_name = (string_t){0};
-
-    return 0;
+dom_node_t get_new_text_node() {
+    dom_node_t text_node = {0};
+    text_node.type = DOM_TEXT;
+    set_default_params(&text_node);
+    text_node.data.text_node = (text_node_t){
+        .text = (string_t){0}
+    };
+    return text_node;
 }
 
 int get_element_for_token(dom_node_t* out, token_t* token) {
@@ -433,6 +460,48 @@ dom_node_t* current_insertion_point(const tree_builder_t* builder) {
     return insert;
 }
 
+dom_node_t* insert_characters(const tree_builder_t* builder, const string_view_t data) {
+    dom_node_t* insert = current_insertion_point(builder);
+    if (!insert)
+        return NULL;
+    // if a text node exists right before insert
+    if (insert->parent &&
+        insert->parent->children_amount != 0 &&
+        insert->parent->children[insert->parent->children_amount - 1]->type == TEXT) {
+        dom_node_t* node = insert->parent->children[insert->parent->children_amount - 1];
+        if (parser_string_append_view(&node->data.text_node.text, data) != 0)
+            return NULL;
+        return node;
+    }
+
+    dom_node_t new_text_node = get_new_text_node();
+    if (parser_string_append_view(&new_text_node.data.text_node.text, data) != 0)
+        return NULL;
+    dom_node_t* node = add_child_move(insert, &new_text_node);
+    return node;
+}
+
+dom_node_t* insert_character(const tree_builder_t* builder, const int c) {
+    dom_node_t* insert = current_insertion_point(builder);
+    if (!insert)
+        return NULL;
+    // if a text node exists right before insert
+    if (insert->parent &&
+        insert->parent->children_amount != 0 &&
+        insert->parent->children[insert->parent->children_amount - 1]->type == TEXT) {
+        dom_node_t* node = insert->parent->children[insert->parent->children_amount - 1];
+        if (parser_string_append_char(&node->data.text_node.text, c) != 0)
+            return NULL;
+        return node;
+        }
+
+    dom_node_t new_text_node = get_new_text_node();
+    if (parser_string_append_char(&new_text_node.data.text_node.text, c) != 0)
+        return NULL;
+    dom_node_t* node = add_child_move(insert, &new_text_node);
+    return node;
+}
+
 static void handle_consume_flag(tree_builder_t* builder) {
     if (builder->consume_flag)
         consume_token(builder);
@@ -445,7 +514,7 @@ node_result_t handle_initial_state(tree_builder_t* builder) {
     token_t* current_token = &builder->current_token;
     switch (current_token->type) {
         case COMMENT: {
-            get_new_comment_node(&builder->pending_node);
+            builder->pending_node = get_new_comment_node();
             parser_move_string(&builder->pending_node.data.comment.text,
                 &current_token->data.comment.text);
             if (add_child_move(builder->root_node, &builder->pending_node) == NULL) {
@@ -463,7 +532,7 @@ node_result_t handle_initial_state(tree_builder_t* builder) {
             }
 
             // using { NULL, 0, 0 } to represent empty string
-            get_new_doctype_node(&builder->pending_node);
+            builder->pending_node = get_new_doctype_node();
             parser_move_string(&builder->pending_node.data.doctype.name,
                 &token_data->name);
             parser_move_string(&builder->pending_node.data.doctype.public_id,
@@ -498,7 +567,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
             return NODE_OK;
         }
         case COMMENT: {
-            get_new_comment_node(&builder->pending_node);
+            builder->pending_node = get_new_comment_node();
             parser_move_string(&builder->pending_node.data.comment.text,
                 &current_token->data.comment.text);
             if (add_child_move(builder->root_node, &builder->pending_node) == NULL) {
@@ -515,7 +584,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
         }
         case START_TAG: {
             if (parser_cstrcmp("html", &current_token->data.tag.name) == 0) {
-                get_new_element_node(&builder->pending_node);
+                builder->pending_node = get_new_element_node();
                 get_element_for_token(&builder->pending_node, current_token);
 
                 dom_node_t* node = add_child_move(builder->root_node, &builder->pending_node);
@@ -548,7 +617,7 @@ node_result_t handle_before_html_state(tree_builder_t* builder) {
     }
 
     // anything else
-    get_new_element_node(&builder->pending_node);
+    builder->pending_node = get_new_element_node();
     element_node_t* node_data = &builder->pending_node.data.element;
     if (parser_string_init_cstr(&node_data->tag_name, "html") != 0)
         goto fail;
@@ -579,7 +648,7 @@ node_result_t handle_before_head_state(tree_builder_t* builder) {
             break;
         }
         case COMMENT: {
-            get_new_comment_node(&builder->pending_node);
+            builder->pending_node = get_new_comment_node();
             parser_move_string(&builder->pending_node.data.comment.text,
                 &current_token->data.comment.text);
             dom_node_t* node = add_child_move(current_insertion_point(builder), &builder->pending_node);
@@ -593,10 +662,7 @@ node_result_t handle_before_head_state(tree_builder_t* builder) {
         }
         case START_TAG: {
             if (parser_cstrcmp("html", &current_token->data.tag.name) == 0) {
-                builder->temporary_state = IN_BODY;
-                builder->temporary_state_flag = true;
-                builder->consume_flag = false;
-                return NODE_REPROCESS;
+                return process_in(builder, IN_BODY);
             }
             if (parser_cstrcmp("head", &current_token->data.tag.name) == 0) {
                 dom_node_t* insert = current_insertion_point(builder);
@@ -645,13 +711,70 @@ node_result_t handle_before_head_state(tree_builder_t* builder) {
     return NODE_ERROR;
 }
 
+node_result_t handle_in_head_state(tree_builder_t* builder) {
+    handle_consume_flag(builder);
+    token_t* current_token = &builder->current_token;
+    if (current_token->type == CHARACTER &&
+        is_html_whitespace(current_token->data.character.character)) {
+        if (!insert_character(builder, current_token->data.character.character))
+            return NODE_ERROR;
+        return NODE_OK;
+    }
+    if (current_token->type == COMMENT) {
+        dom_node_t* insert = current_insertion_point(builder);
+        dom_node_t comment_node = get_new_comment_node();
+        parser_move_string(&comment_node.data.comment.text, &current_token->data.comment.text);
+        if (!add_child(insert, &comment_node))
+            return NODE_ERROR;
+        return NODE_OK;
+    }
+    if (current_token->type == DOCTYPE) {
+        // parse error
+        return NODE_ERROR;
+    }
+    if (current_token->type == START_TAG) {
+        const tag_token* data = &current_token->data.tag;
+        if (parser_cstrcmp("html", &data->name) == 0) {
+            return process_in(builder, IN_BODY);
+        }
+        if (parser_cstrcmp("head", &data->name) == 0) {
+            dom_node_t* node = insert_element_for_token(builder, current_token, false, NULL);
+            if (!node)
+                return NODE_ERROR;
+            builder->head_element = node;
+            builder->insertion_state = IN_HEAD;
+            return NODE_OK;
+        }
+        return NODE_OK;
+    }
+    if (current_token->type == END_TAG) {
+        const tag_token* data = &current_token->data.tag;
+        if (parser_cstrcmp("head", &data->name) == 0 ||
+            parser_cstrcmp("body", &data->name) == 0 ||
+            parser_cstrcmp("html", &data->name) == 0 ||
+            parser_cstrcmp("br", &data->name) == 0) {
+            goto anything_else;
+        }
+        return NODE_OK;
+    }
+    anything_else:
+    token_t token = get_new_start_tag_token();
+    if (parser_string_init_cstr(&token.data.tag.name, "head") != 0)
+        return NODE_ERROR;
+    dom_node_t* head_node = insert_element_for_token(builder, &token, false, NULL);
+    if (!head_node)
+        return NODE_ERROR;
+    builder->insertion_state = IN_HEAD;
+    return NODE_OK;
+}
+
 int tree_node_next(tree_builder_t* builder) {
     typedef node_result_t (*handler_t)(tree_builder_t* builder);
     const static handler_t handlers[] = {
         [INITIAL] = handle_initial_state,
         [BEFORE_HTML] = handle_before_html_state,
         [BEFORE_HEAD] = handle_before_head_state,
-        [IN_HEAD] = NULL,
+        [IN_HEAD] = handle_in_head_state,
         [IN_HEAD_NOSCRIPT] = NULL,
         [AFTER_HEAD] = NULL,
         [IN_BODY] = NULL,
