@@ -194,7 +194,7 @@ int stack_push(open_elem_stack_t* stack, dom_node_t* node) {
 dom_node_t* stack_top(const open_elem_stack_t* stack) {
     if (stack_is_empty(stack))
         return NULL;
-    return stack->elements[stack->stack_top];
+    return stack->elements[stack->stack_top - 1];
 }
 
 bool stack_is_empty(const open_elem_stack_t* stack) {
@@ -467,7 +467,7 @@ dom_node_t* insert_element_for_token(tree_builder_t* builder,
     dom_node_t* node = add_child_move(insert_location, &element);
     if (!node)
         goto fail;
-    if (stack_push(builder->open_elem_stack, &element) != 0)
+    if (stack_push(builder->open_elem_stack, node) != 0)
         goto fail;
     return node;
 
@@ -511,7 +511,7 @@ dom_node_t* insert_character(const tree_builder_t* builder, const int c) {
     // if a text node exists right before insert
     if (insert->parent &&
         insert->parent->children_amount != 0 &&
-        insert->parent->children[insert->parent->children_amount - 1]->type == TEXT) {
+        insert->parent->children[insert->parent->children_amount - 1]->type == DOM_TEXT) {
         dom_node_t* node = insert->parent->children[insert->parent->children_amount - 1];
         if (parser_string_append_char(&node->data.text_node.text, c) != 0)
             return NULL;
@@ -863,15 +863,15 @@ int tree_node_next(tree_builder_t* builder) {
     do {
         assert(builder->insertion_state < INSERTION_STATE_COUNT);
         handler_t handler = NULL;
+        insertion_state_t insertion_state = builder->insertion_state;
         if (builder->temporary_state_flag) {
-            handler = handlers[builder->temporary_state];
+            insertion_state = builder->temporary_state;
             builder->temporary_state_flag = false;
         }
-        else
-            handler = handlers[builder->insertion_state];
+        handler = handlers[insertion_state];
         if (!handler) {
             printf("Unknown or unhandled tree builder state: %s\n",
-                insertion_state_to_string(builder->insertion_state));
+                insertion_state_to_string(insertion_state));
             result = NODE_ERROR;
             break;
         }
