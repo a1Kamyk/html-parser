@@ -490,7 +490,7 @@ dom_node_t* insert_characters(const tree_builder_t* builder, const string_view_t
     // if a text node exists right before insert
     if (insert->parent &&
         insert->parent->children_amount != 0 &&
-        insert->parent->children[insert->parent->children_amount - 1]->type == TEXT) {
+        insert->parent->children[insert->parent->children_amount - 1]->type == DOM_TEXT) {
         dom_node_t* node = insert->parent->children[insert->parent->children_amount - 1];
         if (parser_string_append_view(&node->data.text_node.text, data) != 0)
             return NULL;
