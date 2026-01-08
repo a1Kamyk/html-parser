@@ -833,6 +833,119 @@ node_result_t handle_in_head_state(tree_builder_t* builder) {
     return reprocess_in(builder, AFTER_HEAD);
 }
 
+node_result_t handle_after_head_state(tree_builder_t* builder) {
+    handle_consume_flag(builder);
+    token_t* current_token = &builder->current_token;
+    if (current_token->type == CHARACTER &&
+        is_html_whitespace(current_token->data.character.character)) {
+        if (!insert_character(builder, current_token->data.character.character))
+            return NODE_ERROR;
+        return NODE_OK;
+    }
+    if (current_token->type == COMMENT) {
+        dom_node_t* insert = current_insertion_point(builder);
+        dom_node_t comment_node = get_new_comment_node();
+        parser_move_string(&comment_node.data.comment.text, &current_token->data.comment.text);
+        if (!add_child(insert, &comment_node))
+            return NODE_ERROR;
+        return NODE_OK;
+    }
+    if (current_token->type == DOCTYPE) {
+        // parse error
+        return NODE_ERROR;
+    }
+    if (current_token->type == START_TAG) {
+        const tag_token* data = &current_token->data.tag;
+        if (parser_cstrcmp("html", &data->name) == 0) {
+            return process_in(builder, IN_BODY);
+        }
+        if (parser_cstrcmp("body", &data->name) == 0) {
+            if (!insert_element_for_token(builder, current_token, false, NULL))
+                return NODE_ERROR;
+            // ignoring frameset flag
+            builder->insertion_state = IN_BODY;
+            return NODE_OK;
+        }
+        if (parser_cstrcmp("frameset", &data->name) == 0) {
+            if (!insert_element_for_token(builder, current_token, false, NULL))
+                return NODE_ERROR;
+            builder->insertion_state = IN_FRAMESET;
+            return NODE_OK;
+        }
+        if (parser_cstrcmp("base", &data->name) == 0 ||
+            parser_cstrcmp("basefont", &data->name) == 0 ||
+            parser_cstrcmp("bgsount", &data->name) == 0 ||
+            parser_cstrcmp("link", &data->name) == 0 ||
+            parser_cstrcmp("meta", &data->name) == 0 ||
+            parser_cstrcmp("noframes", &data->name) == 0 ||
+            parser_cstrcmp("script", &data->name) == 0 ||
+            parser_cstrcmp("style", &data->name) == 0 ||
+            parser_cstrcmp("template", &data->name) == 0 ||
+            parser_cstrcmp("title", &data->name) == 0) {
+            // parse error
+            return NODE_ERROR;
+        }
+        if (parser_cstrcmp("head", &data->name) == 0) {
+            // parse error
+            return NODE_ERROR;
+        }
+        return NODE_ERROR;
+    }
+    if (current_token->type == END_TAG) {
+        const tag_token* data = &current_token->data.tag;
+        if (parser_cstrcmp("template", &data->name) == 0) {
+            return reprocess_in(builder, IN_HEAD);
+        }
+        if (parser_cstrcmp("body", &data->name) == 0 ||
+            parser_cstrcmp("html", &data->name) == 0 ||
+            parser_cstrcmp("br", &data->name) == 0) {
+            // anything else entry
+        }
+        // parse error
+        return NODE_ERROR;
+    }
+
+    // anything else
+    token_t body_start_tag = get_new_start_tag_token();
+    if (parser_string_init_cstr(&body_start_tag.data.tag.name, "body") != 0)
+        return NODE_ERROR;
+    if (!insert_element_for_token(builder, &body_start_tag, false, NULL))
+        return NODE_ERROR;
+    return reprocess_in(builder, IN_BODY);
+}
+
+node_result_t handle_text_state(tree_builder_t* builder) {
+    handle_consume_flag(builder);
+    const token_t* current_token = &builder->current_token;
+    switch (current_token->type) {
+        case CHARACTER: {
+            const character_token* data = &current_token->data.character;
+            const int c = data->character == NULL_CHARACTER ? REPLACEMENT_CHARACTER : data->character;
+            if (!insert_character(builder, c))
+                return NODE_ERROR;
+            return NODE_OK;
+        }
+        case END_OF_FILE: {
+            // ignoring other instructions and throwing an error
+            return NODE_ERROR;
+        }
+        case END_TAG: {
+            const tag_token* data = &current_token->data.tag;
+            if (parser_cstrcmp("script", &data->name)) {
+                // not handling scripts
+                return NODE_ERROR;
+            }
+            assert(builder->temporary_state_flag);
+            stack_pop(builder->open_elem_stack, NULL);
+            builder->temporary_state_flag = false;
+            return NODE_OK;
+        }
+        default: {
+            return NODE_ERROR;
+        }
+    }
+}
+
 int tree_node_next(tree_builder_t* builder) {
     typedef node_result_t (*handler_t)(tree_builder_t* builder);
     const static handler_t handlers[] = {
@@ -843,7 +956,7 @@ int tree_node_next(tree_builder_t* builder) {
         [IN_HEAD_NOSCRIPT] = NULL,
         [AFTER_HEAD] = NULL,
         [IN_BODY] = NULL,
-        [TEXT] = NULL,
+        [TEXT] = handle_text_state,
         [IN_TABLE] = NULL,
         [IN_TABLE_TEXT] = NULL,
         [IN_CAPTION] = NULL,
