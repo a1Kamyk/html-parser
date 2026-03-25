@@ -13,3 +13,7 @@
 ## Requirements 
 - Any C compiler
 - CMake 3.5 or newer
+
+## Goals
+- Generate a DOM tree from HTML source code
+- Move from a standalone binary to static / dynamic library
