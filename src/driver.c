@@ -58,7 +58,8 @@ int run_parser(const int argc, char **argv) {
 
     // Create temporary filepath
     const char *filepath= argv[1];
-    char* temp_filepath = malloc(strlen(filepath) + strlen("/") + strlen(temp_dir) + 1);
+    const size_t temp_filepath_len = strlen(temp_dir) + strlen("/") + strlen(filepath) + 1;
+    char* temp_filepath = calloc(temp_filepath_len, sizeof(char));
     if (!temp_filepath) return 1;
     strcpy(temp_filepath, temp_dir);
     strcat(temp_filepath, "/");
@@ -82,10 +83,9 @@ int run_parser(const int argc, char **argv) {
         return 1;
     }
 
+    // Start parser in default state
     parser_t parser;
     parser_init(&parser, stream);
-
-    // Start parser in default state
 
     dom_node_t* dom_root = parse_document(&parser);
 
@@ -141,6 +141,6 @@ void parser_init(parser_t* parser, FILE* stream) {
     builder->head_element = NULL;
 }
 
-void parser_change_tokenizer_state(parser_t* parser, data_state_t state) {
+void parser_change_tokenizer_state(parser_t* parser, const data_state_t state) {
     parser->tokenizer.data_state = state;
 }
