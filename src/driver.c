@@ -1,9 +1,11 @@
 #include "driver.h"
 
-#include <sys/stat.h>
+#include <string.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "misc.h"
 #include "preprocessor.h"
 #include "tokenizer.h"
 #include "tree_builder.h"
@@ -50,7 +52,7 @@ int run_parser(const int argc, char **argv) {
     const char* temp_dir = "temp";
     struct stat s = {0};
     if (stat(temp_dir, &s) == -1) {
-        if (mkdir(temp_dir) == -1) {
+        if (parser_mkdir(temp_dir) == -1) {
             printf("Count not create directory: %s\n", temp_dir);
             return 1;
         }

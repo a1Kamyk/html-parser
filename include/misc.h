@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include <sys/stat.h>
+
 #define NULL_CHARACTER          0x0000
 #define CHARACTER_TABULATION    0x0009
 #define LINE_FEED               0x000A
@@ -65,6 +67,9 @@ typedef struct {
     const int* data;
     size_t length;
 } string_view_t;
+
+int parser_mkdir(const char* path);
+int parser_stat(const char* path, struct stat* statbuf);
 
 int parser_string_init(string_t* str);
 int parser_string_init_sized(string_t* str, size_t capacity);

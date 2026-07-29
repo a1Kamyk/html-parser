@@ -6,6 +6,20 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
+
+int parser_mkdir(const char* path) {
+#if defined(_WIN32) || defined(_WIN64)
+    return mkdir(path);
+#else 
+    // creates a directory with standard rwxr-xr-x permissions
+    return mkdir(path, 0755);
+#endif
+}
+
+int parser_stat(const char* path, struct stat* statbuf) {
+    return stat(path, statbuf);
+}
 
 int parser_string_init(string_t* str) {
     return parser_string_init_sized(str, STRING_DEFAULT_CAPACITY);
